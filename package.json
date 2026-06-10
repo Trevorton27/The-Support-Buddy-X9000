@@ -10,10 +10,18 @@
     "seed": "dotenv -e .env.local -- tsx scripts/seed-db.ts",
     "ingest": "dotenv -e .env.local -- tsx scripts/ingest-docs.ts",
     "reset": "dotenv -e .env.local -- tsx scripts/reset-demo.ts",
+    "knowledge:fetch": "tsx scripts/knowledge-fetch-docs.ts",
+    "knowledge:refresh": "tsx scripts/knowledge-fetch-docs.ts --force",
+    "knowledge:ingest": "dotenv -e .env.local -- tsx scripts/knowledge-ingest.ts",
+    "knowledge:seed": "npm run knowledge:fetch && npm run knowledge:ingest",
+    "knowledge:reset": "dotenv -e .env.local -- tsx scripts/knowledge-reset.ts",
+    "knowledge:evaluate": "dotenv -e .env.local -- tsx scripts/knowledge-evaluate.ts",
     "db:generate": "prisma generate",
     "db:push": "dotenv -e .env.local -- prisma db push",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:studio": "dotenv -e .env.local -- prisma studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -57,6 +65,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
   }
 }
