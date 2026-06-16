@@ -2,7 +2,7 @@
 
 A portfolio-grade multi-agent AI system for automated support ticket investigation. When a support ticket is submitted, a LangGraph-orchestrated pipeline of specialized AI agents runs in the background — classifying the ticket, analyzing logs, retrieving relevant runbooks via RAG, correlating incidents and deployments, generating root-cause hypotheses, drafting a customer reply, enforcing guardrails, and routing through a human-in-the-loop approval queue before delivery.
 
-Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ships with a full eval system, incident clustering, real-time agent telemetry, and adapter-based external integrations (Slack, Sentry, Datadog, Zendesk).
+Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ships with a production RAG knowledge base (heading-aware chunking, HuggingFace cross-encoder reranking, `[KB-N]` citation labels wired through every agent), a full eval system, incident clustering, real-time agent telemetry, and adapter-based external integrations (Slack, Sentry, Datadog, Zendesk).
 
 **In this article**
 
@@ -16,7 +16,7 @@ Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ship
 - [Incident Clustering](#incident-clustering)
 - [Eval System](#eval-system)
 - [Database Schema](#database-schema)
-- [RAG Pipeline](#rag-pipeline)
+- [RAG Knowledge Base](#rag-knowledge-base)
 - [Setup](#setup)
 - [Key Commands](#key-commands)
 - [Optional Integrations](#optional-integrations)
@@ -36,6 +36,8 @@ Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ship
 8. Incidents auto-clustered at `/incidents` — P0/P1/P2 severity banners, status-page editor, affected-customer table
 9. Eval runs visible at `/eval` — pass rate trend chart, per-dimension scores per golden example
 10. Org members listed at `/team` via Clerk Organizations
+11. Browse the Knowledge Library at `/knowledge` — search, filter by source type, view documents with LLM summaries and chunk content
+12. On any ticket detail page, the **Knowledge Context** panel auto-retrieves relevant articles and runbooks with `[KB-N]` citation labels and similarity score bars; manual search available inline
 
 ---
 
@@ -89,6 +91,9 @@ signal-ops-ai-v1/
 │   │   │   ├── page.tsx              # Eval run history + pass rate trend chart
 │   │   │   ├── [runId]/page.tsx      # Per-example scores + dimension breakdowns
 │   │   │   └── examples/page.tsx     # Golden example browser
+│   │   ├── knowledge/
+│   │   │   ├── page.tsx              # Knowledge Library — search + source-type filter
+│   │   │   └── [id]/page.tsx         # Document detail — metadata, summary, chunks
 │   │   ├── team/page.tsx             # Phase 8 — org member list (Clerk API)
 │   │   ├── admin/                    # Admin: generate demo tickets/incidents
 │   │   └── settings/page.tsx         # Model info, integration cards, demo reset
@@ -118,7 +123,14 @@ signal-ops-ai-v1/
 │       │   ├── runs/route.ts         # GET list, POST trigger
 │       │   ├── runs/[id]/route.ts    # GET single run with results
 │       │   └── examples/route.ts     # GET list, POST create
-│       ├── search/route.ts           # GET — pgvector RAG search
+│       ├── knowledge/
+│       │   ├── documents/route.ts    # GET — list with sourceType/productArea/q filters
+│       │   ├── documents/[id]/route.ts  # GET — single doc with chunks
+│       │   ├── retrieve/route.ts     # POST — ad-hoc retrieval (returns evidence + optional [KB-N] block)
+│       │   └── ingest/route.ts       # POST — admin: trigger background ingestion
+│       ├── tickets/[ticketId]/
+│       │   └── retrieve-context/route.ts  # POST — auto-retrieve context for a ticket
+│       ├── search/route.ts           # GET — pgvector RAG search (legacy)
 │       ├── seed/route.ts             # POST — demo database reset
 │       └── webhooks/inngest/         # Inngest receiver (GET/POST/PUT) — public
 │
@@ -174,6 +186,11 @@ signal-ops-ai-v1/
 │   ├── eval/
 │   │   ├── score-card.tsx            # Per-dimension score bars
 │   │   └── pass-rate-chart.tsx       # Pure CSS/SVG bar chart trend
+│   ├── knowledge/
+│   │   ├── knowledge-library.tsx     # Debounced search + source-type sidebar filter (client)
+│   │   ├── knowledge-document-detail.tsx  # Doc view: metadata, summary, collapsible chunks (client)
+│   │   ├── ticket-context-panel.tsx  # Auto-retrieve + manual search panel on ticket detail (client)
+│   │   └── source-type-badge.tsx     # Colour-coded badge for all 8 source types
 │   ├── settings/
 │   │   ├── integration-card.tsx      # Live/mock indicator + test button (client component)
 │   │   └── demo-reset.tsx            # Reset button (client component)
@@ -192,7 +209,9 @@ signal-ops-ai-v1/
 │   ├── auth.ts                       # requireAuth() + requireOrgAuth()
 │   ├── env.ts                        # Zod-validated env vars (server-only)
 │   ├── embeddings.ts                 # embedText() — text-embedding-3-small
-│   ├── vector-search.ts              # searchKnowledge() — pgvector cosine search
+│   ├── vector-search.ts              # searchKnowledge(), searchKnowledgeFiltered(), searchKnowledgeKeyword()
+│   ├── knowledge-chunker.ts          # Heading-aware markdown chunker (~3200 chars, ~600 overlap)
+│   ├── knowledge-retrieval.ts        # Full retrieval pipeline: embed → filter → rerank → [KB-N] labels
 │   ├── agent-utils.ts                # extractTokenUsage(), estimateCostUsd(), formatCostUsd()
 │   ├── guardrails-rules.ts           # Deterministic PII/secret regex checks → GuardrailFlag[]
 │   ├── reranker.ts                   # HF cross-encoder with 5-min cache + fallback
@@ -214,12 +233,11 @@ signal-ops-ai-v1/
 │
 ├── scripts/
 │   ├── seed-db.ts                    # Insert demo customers + tickets
-│   ├── ingest-docs.ts                # Embed knowledge-base/ into pgvector
+│   ├── ingest-docs.ts                # Embed knowledge-base/ into pgvector (legacy)
 │   ├── reset-demo.ts                 # Clear + re-seed + re-ingest
-│   ├── knowledge-fetch-docs.ts       # Fetch/cache external docs
-│   ├── knowledge-ingest.ts           # Embed fetched knowledge docs
-│   ├── knowledge-reset.ts
-│   ├── knowledge-evaluate.ts
+│   ├── knowledge-ingest.ts           # Parse front-matter, chunk, embed → KnowledgeDocument + KnowledgeChunk
+│   ├── knowledge-reset.ts            # Delete managed knowledge docs/chunks (preserves legacy)
+│   ├── knowledge-evaluate.ts         # Retrieval eval: hit@1/3/5 against golden query set
 │   ├── run-eval.ts                   # CLI eval runner
 │   └── export-eval-data.ts           # Bootstrap EvalExample rows from approved runs
 │
@@ -237,10 +255,19 @@ signal-ops-ai-v1/
 │   ├── deployments.json
 │   └── sentry-issues.json
 │
-├── knowledge-base/                   # RAG source documents (Markdown)
+├── knowledge-base/                   # Legacy RAG source documents (Markdown, ingest-docs.ts)
 │   ├── runbooks/
 │   ├── product-docs/
 │   └── internal-notes/
+│
+├── knowledge/                        # Managed knowledge base (knowledge-ingest.ts)
+│   ├── runbooks/
+│   ├── product-docs/
+│   ├── architecture-docs/
+│   ├── incident-reports/
+│   ├── support-tickets/
+│   └── evals/
+│       └── retrieval-eval.json       # Golden query set for hit@K evaluation
 │
 ├── middleware.ts                     # Clerk auth gate
 ├── next.config.ts
@@ -471,10 +498,27 @@ ApprovalAudit
   originalDraft, finalDraft, note?
   createdAt
 
+KnowledgeDocument
+  id, title, sourceType, sourceName, sourceUrl?
+  productArea?, tags: String[]
+  summary?                    ← optional LLM-generated summary
+  filePath (unique)
+  createdAt, updatedAt
+  └── has many KnowledgeChunk
+
 KnowledgeChunk
   id, sourcePath, chunkIndex (unique together)
+  documentId?                 ← null for legacy chunks (ingest-docs.ts)
+  heading?                    ← active heading at chunk start
+  tokenCount?
   content: String
   embedding: vector(1536)     ← requires raw SQL
+
+RetrievalResult
+  id, query, ticketId?, investigationRunId?
+  chunkIds: String[]          ← returned chunk IDs
+  scores: Json                ← { chunkId → score } map
+  createdAt
 
 Incident
   id, title, description, status, severity
@@ -505,23 +549,96 @@ EvalResult
 
 ---
 
-## RAG Pipeline
+## RAG Knowledge Base
+
+### Sources
+
+| Source type | Description |
+|---|---|
+| `RUNBOOK` | Step-by-step operational runbooks |
+| `INCIDENT_REPORT` | Post-mortems and incident summaries |
+| `SUPPORT_TICKET` | Historical resolved support tickets |
+| `PRODUCT_DOC` | Product feature documentation |
+| `ARCHITECTURE_DOC` | System design and architecture notes |
+| `EXTERNAL_DOC` | Third-party vendor documentation |
+| `ALERT` | Alert rule definitions |
+| `LOG_SUMMARY` | Log pattern summaries |
+
+Source documents are Markdown files in `knowledge/` with optional front-matter:
+
+```markdown
+**Source Type:** RUNBOOK
+**Source Name:** Database Failover Runbook
+**Tags:** database, failover, postgres
+**Product Area:** Infrastructure
+```
+
+### Ingestion Pipeline
 
 ```
-npm run ingest
-  └─ scripts/ingest-docs.ts
-       ├─ Walk knowledge-base/**/*.md
-       ├─ Split into ~2000 char chunks (paragraph-aware)
+npm run knowledge:ingest
+  └─ scripts/knowledge-ingest.ts
+       ├─ Walk knowledge/**/*.md
+       ├─ Parse front-matter → sourceType, tags, productArea, sourceName
+       ├─ lib/knowledge-chunker.ts — heading-aware chunker
+       │    ├─ Strip front-matter header lines
+       │    ├─ Split on headings + ~3200 char target (~800 tokens)
+       │    ├─ ~600 char overlap between chunks
+       │    └─ Prepend active heading to each chunk
+       ├─ Upsert KnowledgeDocument (key: filePath)
        └─ For each chunk:
             ├─ embedText() → float[1536] (text-embedding-3-small)
-            └─ Upsert into KnowledgeChunk via prisma.$executeRaw
+            └─ Upsert KnowledgeChunk via prisma.$executeRaw
                  (key: [sourcePath, chunkIndex])
+```
 
-Query time (knowledge-agent.ts):
-  ├─ embedText(ticketSummary) → float[1536]
-  ├─ searchKnowledge(embedding, topK=15)  ← pgvector cosine (<=>)
-  └─ rerankChunks(query, chunks)          ← HF cross-encoder → top 5
-       └─ 5-min in-memory cache; falls back to pgvector order if key absent
+### Retrieval Pipeline
+
+```
+lib/knowledge-retrieval.ts::retrieveKnowledge(query, options)
+  │
+  ├─ embedText(query) → float[1536]
+  ├─ searchKnowledgeFiltered(embedding, topK=15, filters?)
+  │    └─ pgvector cosine (<=>), LEFT JOIN KnowledgeDocument
+  │         optional WHERE: sourceType IN (...), tags @>, productArea =
+  ├─ Filter by minScore threshold (default 0.25)
+  ├─ searchKnowledgeKeyword() fallback if < 3 results
+  │    └─ PostgreSQL plainto_tsquery full-text search
+  ├─ rerankChunks(query, candidates) — HF cross-encoder
+  │    └─ 5-min in-memory cache; falls back to pgvector order if key absent
+  ├─ Assign [KB-1] … [KB-N] citation labels
+  └─ Write RetrievalResult audit row (skippable via skipAudit: true)
+```
+
+### Agent Integration
+
+Every agent that uses knowledge evidence receives a formatted citation block:
+
+```
+[KB-1] Database Failover Runbook (RUNBOOK · Infrastructure)
+> Step 3: Promote the replica using pg_promote()...
+
+[KB-2] Incident Report: DB Lag June 2024 (INCIDENT_REPORT)
+> Root cause was a stale checkpoint on the primary...
+```
+
+Agents (`knowledge-agent`, `root-cause-agent`, `response-agent`) are instructed via their prompts to reference `[KB-N]` labels in hypotheses, evidence arrays, and customer-facing replies.
+
+### UI
+
+- **`/knowledge`** — searchable, filterable library of all indexed documents; source-type sidebar; document cards with tag chips, chunk count, and relative timestamp
+- **`/knowledge/[id]`** — full document view with LLM summary, metadata header, and collapsible per-chunk accordion showing heading context and token counts
+- **Ticket Context Panel** — on every ticket detail page, auto-retrieves the top 8 relevant articles on load; groups results into Runbooks / Incidents & Tickets / Docs & Guides / Alerts & Logs; shows `[KB-N]` label, colour-coded score bar, excerpt, and expand toggle; supports inline manual search
+
+### Retrieval Evaluation
+
+```bash
+npm run knowledge:evaluate
+  └─ scripts/knowledge-evaluate.ts
+       ├─ Reads knowledge/evals/retrieval-eval.json (golden query set)
+       ├─ Runs retrieveKnowledge() at limit=5, minScore=0.0 per query
+       ├─ Case-insensitive substring title matching
+       └─ Reports hit@1 / hit@3 / hit@5 + miss report
 ```
 
 ---
@@ -572,9 +689,10 @@ docker compose up -d
 ### 4. Apply schema and seed data
 
 ```bash
-npm run db:push      # creates tables + enables pgvector
-npm run seed         # inserts 10 demo customers + 7 tickets
-npm run ingest       # embeds knowledge-base/ into pgvector (requires OPENAI_API_KEY)
+npm run db:push            # creates tables + enables pgvector
+npm run seed               # inserts 10 demo customers + 7 tickets
+npm run ingest             # embeds legacy knowledge-base/ into pgvector (requires OPENAI_API_KEY)
+npm run knowledge:ingest   # chunks + embeds knowledge/ → KnowledgeDocument + KnowledgeChunk
 ```
 
 ### 5. Start Inngest dev server (separate terminal)
@@ -605,10 +723,11 @@ npm run dev          # http://localhost:3000
 | `npm run db:generate` | Regenerate Prisma client after schema changes |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run seed` | Seed demo data |
-| `npm run ingest` | Embed knowledge base |
+| `npm run ingest` | Embed legacy knowledge-base/ into pgvector |
 | `npm run reset` | Full demo reset (clear + re-seed + re-ingest) |
-| `npm run knowledge:fetch` | Fetch/cache external docs |
-| `npm run knowledge:seed` | Fetch + embed external docs |
+| `npm run knowledge:ingest` | Chunk + embed knowledge/ → KnowledgeDocument + KnowledgeChunk |
+| `npm run knowledge:reset` | Delete managed knowledge docs/chunks (preserves legacy) |
+| `npm run knowledge:evaluate` | Retrieval eval: hit@1/3/5 against golden query set |
 | `npx tsx scripts/run-eval.ts --name <name>` | Run eval suite |
 | `npx tsx scripts/export-eval-data.ts` | Bootstrap EvalExample rows from approved runs |
 
