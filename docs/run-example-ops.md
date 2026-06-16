@@ -1,5 +1,7 @@
 # Running Example Operations
 
+> **Purpose:** Hands-on operations guide for triggering and observing every major workflow in the platform — investigations, root-cause analysis, escalations, knowledge base search, and demo resets — through both the UI and direct API calls. Includes a per-ticket scenario matrix so you can target specific agent paths (log analysis, auth runbook retrieval, deployment correlation, incident correlation, GitHub/Jira escalation). Start here when demoing the app or debugging agent behaviour.
+
 **In this article**
 
 - [Prerequisites](#prerequisites)

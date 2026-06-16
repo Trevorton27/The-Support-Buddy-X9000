@@ -1,5 +1,7 @@
 # Signal-Ops AI v2 — RAG Knowledge Base Build Plan
 
+> **Purpose:** The 10-phase build plan for the v2 RAG Knowledge Base upgrade. Covers schema migration (`KnowledgeDocument`, `RetrievalResult`), synthetic content creation across 8 source types, a public documentation fetcher (Clerk, Kubernetes, AWS, PostgreSQL, Vercel), improved heading-aware chunking with overlap, a retrieval service with `[KB-N]` citation labels and keyword fallback, agent integration wiring citations into hypotheses and customer replies, a searchable Knowledge Library UI at `/knowledge`, a per-ticket context panel, and a retrieval evaluation harness (`hit@1/3/5`). Reference `CHANGELOG.md` and `README.md` for current implementation status.
+
 ## Overview
 
 Implement a production-style RAG knowledge base layer for Signal-Ops AI so the app can retrieve

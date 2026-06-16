@@ -1,5 +1,7 @@
 # Changelog
 
+> **Purpose:** Records every feature addition and architectural change made to the platform after the initial build, organized by phase. This is the single source of truth for what was added in each phase (1–8): agent telemetry, guardrails, HITL approval, HuggingFace reranker, external integrations, incident clustering, eval system, and team management. Useful for understanding what exists in the codebase and why decisions were made.
+
 All notable changes since the initial commit are documented here.
 
 ---

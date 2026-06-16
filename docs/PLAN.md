@@ -1,5 +1,7 @@
 # AI Support Operations Platform — Implementation Plan
 
+> **Purpose:** The original greenfield implementation plan written before development began. Describes all required third-party services (Clerk, OpenAI, Neon, Inngest, LangGraph), the 15-step build order, a file-by-file explanation of every module, the Inngest function architecture, and the full agent workflow data flow. Serves as the definitive design reference for the core system — cross-reference with `CHANGELOG.md` in this folder to see how the plan evolved during implementation.
+
 ## Context
 
 This is a greenfield multi-agent dashboard for AI-powered support ticket investigation. A user submits a ticket; a LangGraph-based agent pipeline (Intake → Customer Context → parallel Log/Knowledge/Incident/Deployment agents → Root Cause → Response → Escalation) runs automatically, produces root-cause hypotheses, a drafted customer reply, and an internal escalation note. The goal is a portfolio-grade app demonstrating multi-agent orchestration, RAG, streaming UI, and real-world observability patterns.
