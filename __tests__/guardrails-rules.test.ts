@@ -53,13 +53,17 @@ describe("runDeterministicChecks", () => {
     });
 
     it("flags GitHub personal access tokens", () => {
-      const flags = runDeterministicChecks("Token: GHP_FAKE_TOKEN_FOR_TESTING000000000000");
+      // Constructed at runtime so secret scanners don't false-positive on test fixtures
+      const fakeGhp = ["ghp", "abcdefghijklmnopqrstuvwxyz1234567890"].join("_");
+      const flags = runDeterministicChecks(`Token: ${fakeGhp}`);
       const ghFlag = flags.find((f) => f.description === "GitHub personal access token detected");
       expect(ghFlag).toBeDefined();
     });
 
     it("flags Slack bot tokens", () => {
-      const flags = runDeterministicChecks("Bot token: SLACK_FAKE_TOKEN_FOR_TESTING");
+      // Constructed at runtime so secret scanners don't false-positive on test fixtures
+      const fakeSlack = ["xoxb", "12345678901", "12345678901", "abc123def456ghi"].join("-");
+      const flags = runDeterministicChecks(`Bot token: ${fakeSlack}`);
       const slackFlag = flags.find((f) => f.description === "Slack bot token detected");
       expect(slackFlag).toBeDefined();
     });
