@@ -1,0 +1,206 @@
+[
+  {
+    "source": "clerk",
+    "sourceType": "EXTERNAL_DOC",
+    "strategy": "github-raw",
+    "baseRepo": "clerk/clerk-docs",
+    "baseBranch": "main",
+    "basePath": "docs",
+    "productArea": "Authentication",
+    "pages": [
+      {
+        "path": "guides/configure/auth-strategies/oauth/overview.mdx",
+        "title": "Clerk OAuth Authentication Overview",
+        "tags": ["authentication", "clerk", "oauth", "sign-in"]
+      },
+      {
+        "path": "guides/organizations/overview.mdx",
+        "title": "Clerk Organizations Overview",
+        "tags": ["organizations", "clerk", "multi-tenant", "teams"]
+      },
+      {
+        "path": "guides/development/webhooks/overview.mdx",
+        "title": "Clerk Webhooks",
+        "tags": ["webhooks", "clerk", "events", "svix"]
+      },
+      {
+        "path": "reference/nextjs/clerk-middleware.mdx",
+        "title": "Clerk Next.js Middleware",
+        "tags": ["clerk", "next.js", "middleware", "routing", "auth"]
+      },
+      {
+        "path": "guides/organizations/control-access/roles-and-permissions.mdx",
+        "title": "Clerk Roles and Permissions",
+        "tags": ["roles", "permissions", "clerk", "rbac", "authorization"]
+      },
+      {
+        "path": "guides/users/managing.mdx",
+        "title": "Clerk User Management",
+        "tags": ["users", "clerk", "profiles", "user-data", "management"]
+      }
+    ]
+  },
+  {
+    "source": "kubernetes",
+    "sourceType": "EXTERNAL_DOC",
+    "strategy": "github-raw",
+    "baseRepo": "kubernetes/website",
+    "baseBranch": "main",
+    "basePath": "content/en/docs",
+    "productArea": "Infrastructure",
+    "pages": [
+      {
+        "path": "concepts/containers/_index.md",
+        "title": "Kubernetes Containers",
+        "tags": ["kubernetes", "containers", "runtime", "images"]
+      },
+      {
+        "path": "concepts/workloads/controllers/deployment.md",
+        "title": "Kubernetes Deployments",
+        "tags": ["kubernetes", "deployments", "rollout", "replicas"]
+      },
+      {
+        "path": "concepts/services-networking/ingress.md",
+        "title": "Kubernetes Ingress",
+        "tags": ["kubernetes", "ingress", "networking", "routing", "tls"]
+      },
+      {
+        "path": "concepts/services-networking/service.md",
+        "title": "Kubernetes Services",
+        "tags": ["kubernetes", "services", "networking", "load-balancer"]
+      },
+      {
+        "path": "tasks/debug/debug-application/debug-pods.md",
+        "title": "Debugging Kubernetes Pods",
+        "tags": ["kubernetes", "debugging", "pods", "troubleshooting", "crashloopbackoff"]
+      },
+      {
+        "path": "tasks/debug/debug-application/debug-service.md",
+        "title": "Debugging Kubernetes Services",
+        "tags": ["kubernetes", "debugging", "services", "troubleshooting", "dns"]
+      }
+    ]
+  },
+  {
+    "source": "aws",
+    "sourceType": "EXTERNAL_DOC",
+    "strategy": "github-raw",
+    "productArea": "Infrastructure",
+    "pages": [
+      {
+        "baseRepo": "awsdocs/iam-user-guide",
+        "baseBranch": "main",
+        "basePath": "doc_source",
+        "path": "troubleshoot_general.md",
+        "title": "AWS IAM Troubleshooting",
+        "tags": ["aws", "iam", "permissions", "troubleshooting", "access-denied"]
+      },
+      {
+        "baseRepo": "awsdocs/iam-user-guide",
+        "baseBranch": "main",
+        "basePath": "doc_source",
+        "path": "id_roles_use_switch-role-ec2.md",
+        "title": "AWS IAM Roles for EC2",
+        "tags": ["aws", "iam", "ec2", "roles", "instance-profile"]
+      },
+      {
+        "baseRepo": "awsdocs/amazon-vpc-user-guide",
+        "baseBranch": "master",
+        "basePath": "doc_source",
+        "path": "what-is-amazon-vpc.md",
+        "title": "AWS VPC Overview",
+        "tags": ["aws", "vpc", "networking", "subnets", "security-groups"]
+      },
+      {
+        "baseRepo": "awsdocs/amazon-ecs-developer-guide",
+        "baseBranch": "master",
+        "basePath": "doc_source",
+        "path": "troubleshooting.md",
+        "title": "Amazon ECS Troubleshooting",
+        "tags": ["aws", "ecs", "containers", "troubleshooting", "task-definition"]
+      },
+      {
+        "baseRepo": "awsdocs/amazon-ecs-developer-guide",
+        "baseBranch": "master",
+        "basePath": "doc_source",
+        "path": "task_execution_IAM_role.md",
+        "title": "Amazon ECS Task Execution IAM Role",
+        "tags": ["aws", "ecs", "iam", "task-execution", "permissions", "ecr"]
+      },
+      {
+        "baseRepo": "awsdocs/amazon-cloudwatch-user-guide",
+        "baseBranch": "master",
+        "basePath": "doc_source",
+        "path": "cloudwatch_concepts.md",
+        "title": "Amazon CloudWatch Concepts",
+        "tags": ["aws", "cloudwatch", "monitoring", "metrics", "logs", "alarms"]
+      }
+    ]
+  },
+  {
+    "source": "postgresql",
+    "sourceType": "EXTERNAL_DOC",
+    "strategy": "html-fetch",
+    "productArea": "Database",
+    "pages": [
+      {
+        "url": "https://www.postgresql.org/docs/current/performance-tips.html",
+        "title": "PostgreSQL Performance Tips",
+        "tags": ["postgresql", "performance", "query-optimization", "explain"]
+      },
+      {
+        "url": "https://www.postgresql.org/docs/current/indexes.html",
+        "title": "PostgreSQL Indexes Overview",
+        "tags": ["postgresql", "indexes", "performance", "btree", "gin"]
+      },
+      {
+        "url": "https://www.postgresql.org/docs/current/monitoring-stats.html",
+        "title": "PostgreSQL Statistics Collector",
+        "tags": ["postgresql", "monitoring", "stats", "pg_stat_activity", "performance"]
+      },
+      {
+        "url": "https://www.postgresql.org/docs/current/runtime-config-resource.html",
+        "title": "PostgreSQL Resource Consumption Configuration",
+        "tags": ["postgresql", "configuration", "memory", "connections", "work_mem"]
+      },
+      {
+        "url": "https://www.postgresql.org/docs/current/parallel-query.html",
+        "title": "PostgreSQL Parallel Query",
+        "tags": ["postgresql", "parallel", "performance", "query-planning", "workers"]
+      }
+    ]
+  },
+  {
+    "source": "vercel",
+    "sourceType": "EXTERNAL_DOC",
+    "strategy": "html-fetch",
+    "productArea": "Deployment",
+    "pages": [
+      {
+        "url": "https://vercel.com/docs/deployments/overview",
+        "title": "Vercel Deployments Overview",
+        "tags": ["vercel", "deployments", "ci-cd", "git"]
+      },
+      {
+        "url": "https://vercel.com/docs/projects/environment-variables",
+        "title": "Vercel Environment Variables",
+        "tags": ["vercel", "environment-variables", "configuration", "secrets"]
+      },
+      {
+        "url": "https://vercel.com/docs/functions",
+        "title": "Vercel Functions",
+        "tags": ["vercel", "functions", "serverless", "edge", "api-routes"]
+      },
+      {
+        "url": "https://vercel.com/docs/deployments/build-step",
+        "title": "Vercel Build Step",
+        "tags": ["vercel", "build", "ci-cd", "next.js", "postinstall"]
+      },
+      {
+        "url": "https://vercel.com/docs/deployments/troubleshoot-a-build",
+        "title": "Vercel Troubleshooting Builds",
+        "tags": ["vercel", "errors", "next.js", "build-errors", "troubleshooting"]
+      }
+    ]
+  }
+]

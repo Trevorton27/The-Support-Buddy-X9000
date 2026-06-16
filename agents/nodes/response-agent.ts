@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { extractTokenUsage } from "@/lib/agent-utils";
+import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
 import type { InvestigationState } from "../state";
 
 const logger = createLogger("response-agent");
@@ -51,8 +52,24 @@ ${topHypothesis?.description || ""}
 ## Recommended Action
 ${topHypothesis?.recommendedAction || "Further investigation needed"}
 
-## Knowledge Base Guidance
-${state.knowledgeChunks.slice(0, 2).map((c) => c.content.slice(0, 300)).join("\n\n")}
+## Knowledge Base Evidence
+${formatEvidenceBlock(
+  state.knowledgeChunks.slice(0, 3).map((c) => ({
+    citationLabel: c.citationLabel ?? `[KB-?]`,
+    chunkId: c.id,
+    documentId: c.documentId ?? null,
+    documentTitle: c.documentTitle ?? c.sourcePath,
+    sourceType: c.sourceType ?? "PRODUCT_DOC",
+    sourceName: c.sourcePath,
+    tags: [],
+    score: c.similarity ?? 0,
+    rerankScore: c.rerankScore,
+    contentExcerpt: c.content.slice(0, 400),
+    fullContent: c.content,
+  }))
+)}
+
+When referencing knowledge base articles in your response, use their citation labels (e.g. [KB-1]) inline.
     `.trim();
 
     const response = await client.chat.completions.create({

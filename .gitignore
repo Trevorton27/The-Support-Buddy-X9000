@@ -45,5 +45,9 @@ Thumbs.db
 .inngest/
 .env*
 
+# Knowledge base — fetched external docs (generated, do not commit)
+knowledge/external-docs/**/*.md
+knowledge/external-docs/.fetch-cache.json
+
 # clerk configuration (can include secrets)
 /.clerk/

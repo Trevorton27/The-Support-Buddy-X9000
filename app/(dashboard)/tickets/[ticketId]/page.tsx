@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { TicketDetail } from "@/components/tickets/ticket-detail";
 import { InvestigationPanel } from "@/components/tickets/investigation-panel";
+import { TicketContextPanel } from "@/components/knowledge/ticket-context-panel";
 
 async function getTicket(ticketId: string) {
   return prisma.ticket.findUnique({
@@ -56,8 +57,9 @@ export default async function TicketPage({
         <div className="lg:col-span-2">
           <TicketDetail ticket={ticket} linkedIncident={linkedIncident} />
         </div>
-        <div>
+        <div className="space-y-6">
           <InvestigationPanel ticket={ticket} latestRun={latestRun} />
+          <TicketContextPanel ticketId={ticket.id} />
         </div>
       </div>
     </div>

@@ -47,6 +47,7 @@ model Ticket {
   incidents      IncidentTicket[]
   duplicateOf    Ticket?           @relation("TicketDuplicates", fields: [duplicateOfId], references: [id])
   duplicates     Ticket[]          @relation("TicketDuplicates")
+  retrievalResults RetrievalResult[]
 
   @@index([orgId])
 }
@@ -77,6 +78,7 @@ model InvestigationRun {
   ticket           Ticket          @relation(fields: [ticketId], references: [id])
   steps            AgentStep[]
   approvalRequests ApprovalAudit[]
+  retrievalResults RetrievalResult[]
 
   @@index([orgId])
 }
@@ -103,13 +105,19 @@ model AgentStep {
 
 model KnowledgeChunk {
   id          String                       @id @default(cuid())
+  documentId  String?                      // FK to KnowledgeDocument; null for legacy chunks
   sourcePath  String
   chunkIndex  Int
   content     String
   embedding   Unsupported("vector(1536)")?
+  tokenCount  Int?
+  metadata    Json?                        // { heading?, sourceType?, tags?, productArea? }
   createdAt   DateTime                     @default(now())
 
+  document KnowledgeDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
   @@unique([sourcePath, chunkIndex])
+  @@index([documentId])
 }
 
 // Phase 3: HITL Approval Audit Trail
@@ -222,4 +230,43 @@ model EvalResult {
 
   evalRun     EvalRun     @relation(fields: [evalRunId], references: [id])
   evalExample EvalExample @relation(fields: [evalExampleId], references: [id])
+}
+
+// RAG Knowledge Base — KnowledgeDocument
+// sourceType values: RUNBOOK | SUPPORT_TICKET | INCIDENT_REPORT | PRODUCT_DOC | ARCHITECTURE_DOC | ALERT | LOG_SUMMARY | EXTERNAL_DOC
+model KnowledgeDocument {
+  id              String   @id @default(cuid())
+  title           String
+  sourceType      String   // RUNBOOK | SUPPORT_TICKET | INCIDENT_REPORT | PRODUCT_DOC | ARCHITECTURE_DOC | ALERT | LOG_SUMMARY | EXTERNAL_DOC
+  sourceName      String   // e.g. "clerk", "kubernetes", or original filename
+  sourceUrl       String?  // canonical URL for external docs
+  productArea     String?  // "Authentication" | "Database" | "Infrastructure" | "Deployment" | etc.
+  customerSegment String?  // "enterprise" | "pro" | "all"
+  severity        String?  // "critical" | "high" | "medium" | "low"
+  tags            Json     // string[]
+  content         String   // full original text
+  summary         String?  // LLM-generated summary
+  filePath        String   @unique // absolute-relative path; used for idempotent re-ingestion
+  orgId           String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([sourceType])
+  @@index([orgId])
+}
+
+// RAG Knowledge Base — RetrievalResult audit trail
+model RetrievalResult {
+  id                 String   @id @default(cuid())
+  ticketId           String?
+  investigationRunId String?
+  query              String
+  matchedChunkIds    Json     // string[]
+  scoreMetadata      Json     // { chunkId: string, score: number, rerankScore?: number }[]
+  createdAt          DateTime @default(now())
+
+  ticket           Ticket?           @relation(fields: [ticketId], references: [id])
+  investigationRun InvestigationRun? @relation(fields: [investigationRunId], references: [id])
 }

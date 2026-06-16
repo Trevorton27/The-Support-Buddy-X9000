@@ -14,7 +14,7 @@
     "knowledge:refresh": "tsx scripts/knowledge-fetch-docs.ts --force",
     "knowledge:ingest": "dotenv -e .env.local -- tsx scripts/knowledge-ingest.ts",
     "knowledge:seed": "npm run knowledge:fetch && npm run knowledge:ingest",
-    "knowledge:reset": "dotenv -e .env.local -- tsx scripts/knowledge-reset.ts",
+    "knowledge:reset": "dotenv -e .env.local -- tsx scripts/knowledge-reset.ts && npm run knowledge:ingest",
     "knowledge:evaluate": "dotenv -e .env.local -- tsx scripts/knowledge-evaluate.ts",
     "db:generate": "prisma generate",
     "db:push": "dotenv -e .env.local -- prisma db push",

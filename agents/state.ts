@@ -61,15 +61,20 @@ export interface Hypothesis {
   affectedService?: string;
 }
 
-// Phase 4: EvidenceChunk extends knowledge chunk with reranking metadata
+// Phase 4 + 6: EvidenceChunk with reranking and [KB-N] citation metadata
 export interface KnowledgeChunk {
   id: string;
   sourcePath: string;
   chunkIndex: number;
   content: string;
   similarity?: number;
-  rerankScore?: number;  // HuggingFace cross-encoder score
-  citedBy?: string[];   // agent names that referenced this chunk
+  rerankScore?: number;    // HuggingFace cross-encoder score
+  citedBy?: string[];      // agent names that referenced this chunk
+  // Phase 6 RAG fields
+  documentId?: string | null;
+  documentTitle?: string;
+  sourceType?: string;     // RUNBOOK | SUPPORT_TICKET | INCIDENT_REPORT | etc.
+  citationLabel?: string;  // "[KB-1]"
 }
 
 // Phase 2: Guardrails types

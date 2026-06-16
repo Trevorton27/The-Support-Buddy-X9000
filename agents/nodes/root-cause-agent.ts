@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { extractTokenUsage } from "@/lib/agent-utils";
+import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
 import type { InvestigationState, Hypothesis } from "../state";
 
 const logger = createLogger("root-cause-agent");
@@ -58,8 +59,22 @@ ${state.incidents.map((i) => `- ${i.title} (${i.status}): ${i.rootCause}`).join(
 ## Recent Deployments (within 48h)
 ${state.deployments.slice(0, 5).map((d) => `- ${d.service} ${d.version} at ${d.timestamp}: ${d.notes}`).join("\n") || "None found"}
 
-## Knowledge Base Findings
-${state.knowledgeChunks.slice(0, 3).map((c) => `[Source: ${c.sourcePath}${c.rerankScore !== undefined ? `, rerank: ${c.rerankScore.toFixed(3)}` : ""}]\n${c.content.slice(0, 200)}`).join("\n---\n")}
+## Knowledge Base Evidence
+${formatEvidenceBlock(
+  state.knowledgeChunks.slice(0, 5).map((c) => ({
+    citationLabel: c.citationLabel ?? `[KB-?]`,
+    chunkId: c.id,
+    documentId: c.documentId ?? null,
+    documentTitle: c.documentTitle ?? c.sourcePath,
+    sourceType: c.sourceType ?? "PRODUCT_DOC",
+    sourceName: c.sourcePath,
+    tags: [],
+    score: c.similarity ?? 0,
+    rerankScore: c.rerankScore,
+    contentExcerpt: c.content.slice(0, 400),
+    fullContent: c.content,
+  }))
+)}
     `.trim();
 
     const response = await client.chat.completions.create({

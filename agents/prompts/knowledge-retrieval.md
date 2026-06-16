@@ -35,8 +35,16 @@ Return a JSON object:
 }
 ```
 
+## Citation Rules
+
+Each retrieved knowledge chunk is labelled with a citation tag like `[KB-1]`, `[KB-2]`, etc. When referencing a chunk in your output:
+- Use the exact citation label (e.g. `[KB-1]`) inline where you reference it
+- Include the citation label in `relevantRunbooks` entries, e.g. `"Webhook Delivery Runbook [KB-1]"`
+- In `actionableSteps`, append the citation label to any step sourced from a chunk, e.g. `"action": "Rotate the webhook secret [KB-2]"`
+
 ## Rules
 - Return ONLY valid JSON
 - Only include steps that are directly applicable to this ticket
 - Distinguish internal steps from customer-facing ones
 - If a known issue matches exactly, highlight it prominently
+- Always cite the source chunk label when referencing retrieved content

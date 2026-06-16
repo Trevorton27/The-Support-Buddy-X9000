@@ -6,7 +6,8 @@ import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { extractTokenUsage } from "@/lib/agent-utils";
 import { searchDocs } from "../tools/docs-tool";
-import type { InvestigationState } from "../state";
+import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
+import type { InvestigationState, KnowledgeChunk } from "../state";
 
 const logger = createLogger("knowledge-agent");
 
@@ -40,9 +41,22 @@ export async function knowledgeAgent(
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 
-    const chunksText = chunks
-      .map((c, i) => `### Source: ${c.sourcePath} (chunk ${c.chunkIndex})${c.rerankScore !== undefined ? ` [rerank: ${c.rerankScore.toFixed(3)}]` : ""}\n${c.content}`)
-      .join("\n\n---\n\n");
+    // Build [KB-N] citation block for the prompt
+    const chunksText = formatEvidenceBlock(
+      chunks.map((c): Parameters<typeof formatEvidenceBlock>[0][number] => ({
+        citationLabel: c.citationLabel ?? `[KB-?]`,
+        chunkId: c.id,
+        documentId: c.documentId ?? null,
+        documentTitle: c.documentTitle ?? c.sourcePath,
+        sourceType: c.sourceType ?? "PRODUCT_DOC",
+        sourceName: c.sourcePath,
+        tags: [],
+        score: c.similarity ?? 0,
+        rerankScore: c.rerankScore,
+        contentExcerpt: c.content.slice(0, 400),
+        fullContent: c.content,
+      })),
+    );
 
     const response = await client.chat.completions.create({
       model,
@@ -69,8 +83,13 @@ export async function knowledgeAgent(
         output: {
           ...knowledge,
           chunksRetrieved: chunks.length,
-          sources: chunks.map((c) => c.sourcePath),
-          rerankScores: chunks.map((c) => c.rerankScore ?? null),
+          citations: chunks.map((c) => ({
+            label: c.citationLabel,
+            title: c.documentTitle ?? c.sourcePath,
+            sourceType: c.sourceType,
+            score: c.similarity,
+            rerankScore: c.rerankScore ?? null,
+          })),
           topRerankScore: topRerankScore ?? null,
         },
         completedAt: new Date(),

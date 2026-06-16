@@ -1,7 +1,7 @@
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { LayoutDashboard, Ticket, Search, Settings, Zap, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Ticket, Search, Settings, Zap, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/db";
 
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/investigations", label: "Investigations", icon: Search },
   { href: "/approvals", label: "Approvals", icon: ClipboardCheck, badge: true },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/eval", label: "Eval", icon: FlaskConical },
   { href: "/team", label: "Team", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },

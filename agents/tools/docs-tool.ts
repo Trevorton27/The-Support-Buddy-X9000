@@ -1,23 +1,27 @@
-import { embedText } from "@/lib/embeddings";
-import { searchKnowledge } from "@/lib/vector-search";
-import { rerankChunks } from "@/lib/reranker";
+import { retrieveKnowledge } from "@/lib/knowledge-retrieval";
 import type { KnowledgeChunk } from "../state";
 
+// Phase 6: replaced raw searchKnowledge + rerankChunks with retrieveKnowledge(),
+// which handles embedding, filtered vector search, keyword fallback, reranking,
+// [KB-N] label assignment, and RetrievalResult audit writes in one call.
 export async function searchDocs(query: string, topK = 5): Promise<KnowledgeChunk[]> {
-  const embedding = await embedText(query);
+  const evidence = await retrieveKnowledge(query, {
+    limit: topK,
+    minScore: 0.25,
+    skipAudit: true, // audit written by ticket-specific context route, not here
+  });
 
-  // Phase 4: Fetch more candidates (15) and rerank to get better top-5
-  const candidates = await searchKnowledge(embedding, Math.max(topK * 3, 15));
-  const candidateChunks: KnowledgeChunk[] = candidates.map((r) => ({
-    id: r.id,
-    sourcePath: r.sourcePath,
-    chunkIndex: r.chunkIndex,
-    content: r.content,
-    similarity: r.similarity,
+  return evidence.map((e) => ({
+    id: e.chunkId,
+    // sourcePath preserved for display in existing UI components
+    sourcePath: e.documentTitle || e.sourceName,
+    chunkIndex: 0,
+    content: e.fullContent,
+    similarity: e.score,
+    rerankScore: e.rerankScore,
+    documentId: e.documentId,
+    documentTitle: e.documentTitle,
+    sourceType: e.sourceType,
+    citationLabel: e.citationLabel,
   }));
-
-  // Rerank via HuggingFace cross-encoder (falls back to original order if key absent)
-  const reranked = await rerankChunks(query, candidateChunks);
-
-  return reranked.slice(0, topK);
 }

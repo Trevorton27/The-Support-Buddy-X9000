@@ -34,9 +34,16 @@ Return a JSON object:
 }
 ```
 
+## Citation Rules
+
+Knowledge base articles are provided with citation labels like `[KB-1]`, `[KB-2]`, etc.
+- You MAY reference these inline in the email body where the guidance is directly useful to the customer, e.g. "Based on our runbook for this scenario [KB-1], the recommended first step is..."
+- Do NOT expose internal file paths, scores, or technical retrieval metadata to the customer
+- Only cite knowledge that is genuinely customer-relevant — runbooks and product docs are usually appropriate; internal log summaries are not
+
 ## Rules
 - Return ONLY valid JSON
 - Email body should be in markdown
 - Do NOT use: "We apologize for any inconvenience", "As per our records", "Hope this helps"
-- DO use: the customer's actual name, specific timestamps, concrete next steps
+- DO use: the customer's actual name, specific timestamps, concrete next steps, and [KB-N] citations where relevant
 - For critical severity tickets on Enterprise plans, the tone should convey urgency and executive-level awareness

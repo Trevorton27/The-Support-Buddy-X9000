@@ -38,8 +38,14 @@ Return a JSON object:
 - **50-69%**: Plausible based on symptoms, moderate supporting evidence
 - **< 50%**: Speculative, included for completeness
 
+## Citation Rules
+
+Knowledge base articles are provided with citation labels like `[KB-1]`, `[KB-2]`, etc.
+- When a hypothesis is supported by a knowledge base article, include its citation label in the `evidence` array, e.g. `"Matches known webhook signature issue pattern [KB-1]"`
+- Prefer specific evidence (log timestamps, incident IDs, deployment notes, KB citations) over generic statements
+
 ## Rules
 - Return ONLY valid JSON
 - Rank hypotheses by confidence (highest first)
 - Include at least 2 hypotheses, up to 5
-- Evidence must reference specific log entries, incidents, or deployment changes — not generic statements
+- Evidence must reference specific log entries, incidents, deployment changes, or [KB-N] citations — not generic statements

@@ -1,0 +1,188 @@
+[
+  {
+    "id": "eval-001",
+    "query": "Webhook requests failing after customer rotated API key",
+    "expected_titles": [
+      "Webhook Delivery Troubleshooting Runbook",
+      "API Key Rotation Runbook",
+      "API Key Rotation Broke Webhook Signatures",
+      "Webhook Signing and Retry Behavior"
+    ]
+  },
+  {
+    "id": "eval-002",
+    "query": "Customer getting 401 Invalid signature on webhook delivery",
+    "expected_titles": [
+      "401/403 Webhook Delivery Error Log Summary",
+      "Webhook Delivery Troubleshooting Runbook",
+      "Webhook Signing and Retry Behavior",
+      "API Key Rotation Broke Webhook Signatures"
+    ]
+  },
+  {
+    "id": "eval-003",
+    "query": "Database connection pool exhausted during peak traffic, too many connections error",
+    "expected_titles": [
+      "Database Connection Pool Exhaustion Runbook",
+      "PostgreSQL Connection Timeout During Peak Traffic",
+      "Database Connection Pool Saturation Alert",
+      "Database Connection Pooling Guide"
+    ]
+  },
+  {
+    "id": "eval-004",
+    "query": "SSO login not working after Okta migration, SAML attribute mismatch",
+    "expected_titles": [
+      "SAML/SSO Configuration Issues Runbook",
+      "SAML Assertion Attribute Mismatch After IdP Update",
+      "SAML Provider Outage"
+    ]
+  },
+  {
+    "id": "eval-005",
+    "query": "Vercel deployment failing with missing environment variable in production",
+    "expected_titles": [
+      "Vercel Deployment Failure Runbook",
+      "Vercel Build Failing: Missing Environment Variable in Production",
+      "Vercel Build Error Log Summary",
+      "Deployment Failure Alert"
+    ]
+  },
+  {
+    "id": "eval-006",
+    "query": "OAuth refresh token returning invalid_grant error after user password reset",
+    "expected_titles": [
+      "OAuth Token Expiry and Refresh Runbook",
+      "OAuth Refresh Token Expired After Password Reset",
+      "OAuth Token Validation Error Log Summary"
+    ]
+  },
+  {
+    "id": "eval-007",
+    "query": "API returning 429 too many requests during bulk data import script",
+    "expected_titles": [
+      "Rate Limiting and Backoff Strategy Runbook",
+      "Rate Limit Exceeded During Bulk Data Import",
+      "Rate Limiting Policy and Headers",
+      "Rate Limit Exceeded Log Summary"
+    ]
+  },
+  {
+    "id": "eval-008",
+    "query": "Clerk middleware redirecting all routes to sign-in including public pages",
+    "expected_titles": [
+      "Clerk Middleware Misconfiguration Runbook",
+      "Authentication and Session Flow",
+      "Organization and Multi-Tenancy Overview"
+    ]
+  },
+  {
+    "id": "eval-009",
+    "query": "Docker container crashing with exit code 137, OOM kill in ECS",
+    "expected_titles": [
+      "Docker Container Startup Failures Runbook",
+      "Docker Container OOM Crash in Production",
+      "Deployment Failure Alert"
+    ]
+  },
+  {
+    "id": "eval-010",
+    "query": "GitHub Actions CI build timing out on large monorepo, taking over an hour",
+    "expected_titles": [
+      "CI/CD Pipeline Failures Runbook",
+      "GitHub Actions Build Timeout on Large Monorepo",
+      "Deployment Failure Alert"
+    ]
+  },
+  {
+    "id": "eval-011",
+    "query": "AWS Lambda function permission denied cannot access S3 bucket",
+    "expected_titles": [
+      "AWS IAM Permission Denied for Lambda Execution Role",
+      "API Gateway Architecture"
+    ]
+  },
+  {
+    "id": "eval-012",
+    "query": "Users being logged out when switching organizations in multi-tenant app",
+    "expected_titles": [
+      "Clerk Organization Switch Invalidates Active Session",
+      "Clerk Middleware Misconfiguration Runbook",
+      "Organization and Multi-Tenancy Overview",
+      "Authentication and Session Flow"
+    ]
+  },
+  {
+    "id": "eval-013",
+    "query": "PostgreSQL slow queries, sequential scans on ticket table",
+    "expected_titles": [
+      "Database Slow Query Log Summary",
+      "Database Connection Pool Exhaustion Runbook",
+      "API Latency Spike Alert"
+    ]
+  },
+  {
+    "id": "eval-014",
+    "query": "Webhook events delayed 90 minutes, queue backed up",
+    "expected_titles": [
+      "Webhook Queue Delay Incident",
+      "Webhook Delivery Failure Rate Alert",
+      "Webhook Delivery Pipeline Architecture"
+    ]
+  },
+  {
+    "id": "eval-015",
+    "query": "Prisma client did not initialize error on Vercel build",
+    "expected_titles": [
+      "Vercel Deployment Failure Runbook",
+      "Vercel Build Error Log Summary",
+      "Deployment Pipeline and Infrastructure Overview"
+    ]
+  },
+  {
+    "id": "eval-016",
+    "query": "Pro plan customers receiving 429 errors at free plan rate limits",
+    "expected_titles": [
+      "Rate Limiter Misconfiguration Incident",
+      "Rate Limiting and Backoff Strategy Runbook",
+      "Rate Limit Exceeded Log Summary"
+    ]
+  },
+  {
+    "id": "eval-017",
+    "query": "Neon postgres connection timeout serverless functions too many connections",
+    "expected_titles": [
+      "PostgreSQL Connection Timeout During Peak Traffic",
+      "Database Connection Pool Exhaustion Runbook",
+      "Database Connection Pooling Guide",
+      "Database Architecture and Sharding Strategy"
+    ]
+  },
+  {
+    "id": "eval-018",
+    "query": "Enterprise SSO completely down all employees locked out",
+    "expected_titles": [
+      "SAML Provider Outage",
+      "SAML/SSO Configuration Issues Runbook",
+      "Clerk Middleware Misconfiguration Runbook"
+    ]
+  },
+  {
+    "id": "eval-019",
+    "query": "High 5xx error rate after deployment, application returning 500",
+    "expected_titles": [
+      "High Error Rate Alert",
+      "Vercel Deployment Failure Runbook",
+      "Deployment Failure Alert"
+    ]
+  },
+  {
+    "id": "eval-020",
+    "query": "Webhook signing secret validation HMAC SHA256 how to verify",
+    "expected_titles": [
+      "Webhook Signing and Retry Behavior",
+      "Webhook Delivery Troubleshooting Runbook",
+      "Webhook Delivery Pipeline Architecture"
+    ]
+  }
+]
