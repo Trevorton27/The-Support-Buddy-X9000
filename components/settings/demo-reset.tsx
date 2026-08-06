@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, AlertTriangle } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
 export function DemoReset() {
   const [resetting, setResetting] = useState(false);

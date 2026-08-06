@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import { fetchLogs, fetchTraces } from "../tools/logs-tool";
 import { getDatadogAdapter } from "@/lib/integrations/datadog";
 import type { InvestigationState } from "../state";
@@ -16,13 +16,15 @@ export async function logAnalysisAgent(
 ): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
   const model = "gpt-4o-mini";
+  const promptFile = "log-analysis.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
       investigationRunId: state.runId,
       agentName: "log-analysis",
       status: "running",
-      input: { customerId: state.ticket.customerId },
+      input: { customerId: state.ticket.customerId, promptFile, gitSha: getGitSha() },
     },
   });
 
@@ -33,11 +35,6 @@ export async function logAnalysisAgent(
     // Phase 5: Supplement with Datadog logs if available
     const ddAdapter = getDatadogAdapter();
     const ddLogs = ddAdapter.getLogs();
-
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/log-analysis.md"),
-      "utf-8"
-    );
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 

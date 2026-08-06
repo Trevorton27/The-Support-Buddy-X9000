@@ -112,4 +112,5 @@ export interface InvestigationState {
   escalationNote: string;
   guardrailsResult: GuardrailsResult | null; // Phase 2
   urgencyScore: number | null; // HF sentiment score — 0 (calm) to 1 (urgent/negative)
+  evalModel?: string; // model override for eval runs (e.g. "gpt-4o-mini" vs "gpt-4o")
 }

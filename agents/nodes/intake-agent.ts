@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import type { InvestigationState } from "../state";
 
 const logger = createLogger("intake-agent");
@@ -32,6 +32,7 @@ async function getHfUrgencyScore(text: string, apiKey: string): Promise<number |
     );
     if (!res.ok) return null;
     const data = (await res.json()) as Array<Array<{ label: string; score: number }>>;
+    console.log("[HF intake] urgency raw response from distilbert-base-uncased-finetuned-sst-2-english:", JSON.stringify(data));
     const labels = data[0];
     if (!Array.isArray(labels)) return null;
     const neg = labels.find((l) => l.label === "NEGATIVE");
@@ -57,6 +58,7 @@ async function getHfTopicHint(text: string, apiKey: string): Promise<string | nu
     );
     if (!res.ok) return null;
     const data = (await res.json()) as { labels: string[]; scores: number[] };
+    console.log("[HF intake] topic hint raw response from facebook/bart-large-mnli:", JSON.stringify(data));
     if (!Array.isArray(data.labels) || data.labels.length === 0) return null;
     return data.labels[0]; // highest-scoring label
   } catch {
@@ -67,21 +69,19 @@ async function getHfTopicHint(text: string, apiKey: string): Promise<string | nu
 export async function intakeAgent(state: InvestigationState): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
   const model = "gpt-4o-mini";
+  const promptFile = "intake.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
       investigationRunId: state.runId,
       agentName: "intake",
       status: "running",
-      input: { ticketId: state.ticketId, title: state.ticket.title },
+      input: { ticketId: state.ticketId, title: state.ticket.title, promptFile, gitSha: getGitSha() },
     },
   });
 
   try {
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/intake.md"),
-      "utf-8"
-    );
 
     const env = getEnv();
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });

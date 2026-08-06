@@ -32,6 +32,7 @@ export async function POST() {
     }
 
     const data = (await res.json()) as { labels: string[]; scores: number[] };
+    console.log("[HF admin/classify] raw response from facebook/bart-large-mnli:", JSON.stringify(data));
     const top = data.labels?.[0];
     const score = data.scores?.[0];
 

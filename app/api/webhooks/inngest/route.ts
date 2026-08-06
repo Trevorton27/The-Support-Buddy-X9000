@@ -1,8 +1,8 @@
 import { serve } from "inngest/next";
 import { inngest } from "@/inngest/client";
-import { runInvestigationFunction, clusterTicketsFunction } from "@/inngest/functions";
+import { runInvestigationFunction, clusterTicketsFunction, batchGenerateTicketsFunction } from "@/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [runInvestigationFunction, clusterTicketsFunction],
+  functions: [runInvestigationFunction, clusterTicketsFunction, batchGenerateTicketsFunction],
 });

@@ -7,6 +7,7 @@ import { z } from "zod";
 const createRunSchema = z.object({
   name: z.string().min(1),
   exampleIds: z.array(z.string()).optional(),
+  model: z.string().optional(),
 });
 
 export async function GET() {
@@ -31,16 +32,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const model = parsed.data.model ?? "gpt-4o";
+
   const run = await prisma.evalRun.create({
     data: {
       name: parsed.data.name,
       triggeredBy: userId,
       status: "running",
+      model,
     },
   });
 
   // Run async — don't await, respond immediately
-  runEvalSuite(run.id, parsed.data.exampleIds).catch(async (err) => {
+  runEvalSuite(run.id, parsed.data.exampleIds, model).catch(async (err) => {
     await prisma.evalRun.update({
       where: { id: run.id },
       data: { status: "failed", completedAt: new Date() },

@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { TicketDetail } from "@/components/tickets/ticket-detail";
 import { InvestigationPanel } from "@/components/tickets/investigation-panel";
@@ -45,7 +46,7 @@ export default async function TicketPage({
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-            <a href="/tickets" className="hover:text-slate-900 dark:hover:text-slate-100">Tickets</a>
+            <Link href="/tickets" className="hover:text-slate-900 dark:hover:text-slate-100">Tickets</Link>
             <span className="mx-2">/</span>
             <span>{ticket.externalId}</span>
           </div>

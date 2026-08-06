@@ -43,6 +43,7 @@ export async function POST() {
     }
 
     const embeddings = (await res.json()) as number[][];
+    console.log("[HF admin/dedup] raw embeddings from sentence-transformers/all-MiniLM-L6-v2:", `${embeddings.length} vectors, dim=${embeddings[0]?.length}`);
     if (!Array.isArray(embeddings) || embeddings.length < 2) {
       return NextResponse.json({ ok: false, message: "Unexpected response from HF API" });
     }

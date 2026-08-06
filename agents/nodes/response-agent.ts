@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
 import type { InvestigationState } from "../state";
 
@@ -14,22 +14,20 @@ export async function responseAgent(
   state: InvestigationState
 ): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
-  const model = "gpt-4o";
+  const model = state.evalModel ?? "gpt-4o";
+  const promptFile = "response-drafting.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
       investigationRunId: state.runId,
       agentName: "response-drafting",
       status: "running",
-      input: { hypothesesCount: state.hypotheses.length },
+      input: { hypothesesCount: state.hypotheses.length, promptFile, gitSha: getGitSha(), model },
     },
   });
 
   try {
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/response-drafting.md"),
-      "utf-8"
-    );
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 

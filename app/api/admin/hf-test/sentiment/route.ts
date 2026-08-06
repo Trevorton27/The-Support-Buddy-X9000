@@ -27,6 +27,7 @@ export async function POST() {
     }
 
     const data = (await res.json()) as Array<Array<{ label: string; score: number }>>;
+    console.log("[HF admin/sentiment] raw response from distilbert-base-uncased-finetuned-sst-2-english:", JSON.stringify(data));
     const neg = data?.[0]?.find((l) => l.label === "NEGATIVE");
     const urgencyScore = neg ? Math.round(neg.score * 100) / 100 : null;
 

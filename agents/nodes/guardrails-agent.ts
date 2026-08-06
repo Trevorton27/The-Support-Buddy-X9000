@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import { runDeterministicChecks } from "@/lib/guardrails-rules";
 import type { InvestigationState, GuardrailFlag, GuardrailsResult } from "../state";
 
@@ -15,13 +15,15 @@ export async function guardrailsAgent(
 ): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
   const model = "gpt-4o-mini";
+  const promptFile = "guardrails.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
       investigationRunId: state.runId,
       agentName: "guardrails",
       status: "running",
-      input: { draftLength: state.draftReply.length },
+      input: { draftLength: state.draftReply.length, promptFile, gitSha: getGitSha() },
     },
   });
 
@@ -34,10 +36,6 @@ export async function guardrailsAgent(
     flags.push(...deterministicFlags);
 
     // Step 2: LLM semantic check (unsupported claims, internal leakage, low confidence)
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/guardrails.md"),
-      "utf-8"
-    );
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 

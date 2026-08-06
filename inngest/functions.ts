@@ -4,6 +4,8 @@ import { runInvestigation } from "@/agents/graph";
 import { suggestClusters } from "@/lib/incident-clustering";
 import { getSlackAdapter } from "@/lib/integrations/slack";
 import { createLogger } from "@/lib/logger";
+import { generateTicketBatch } from "@/lib/generation/ticket-generator";
+import type { GenerationParams } from "@/lib/generation/types";
 
 const logger = createLogger("inngest-function");
 
@@ -188,5 +190,114 @@ export const clusterTicketsFunction = inngest.createFunction(
     }
 
     return { clustersFound: clusters.length };
+  }
+);
+
+// Ticket Generation System: large batch generation via Inngest
+export const batchGenerateTicketsFunction = inngest.createFunction(
+  {
+    id: "batch-generate-tickets",
+    name: "Batch Generate Support Tickets",
+    retries: 1,
+    timeouts: { finish: "30m" },
+  },
+  { event: "generation/batch.requested" },
+  async ({ event, step }) => {
+    const { batchId, params } = event.data as { batchId: string; params: GenerationParams };
+
+    // Step 1: Mark batch as running
+    await step.run("mark-running", async () => {
+      await prisma.generationBatch.update({
+        where: { id: batchId },
+        data: { status: "running" },
+      });
+    });
+
+    // Step 2: Generate all drafts
+    const drafts = await step.run("generate-drafts", async () => {
+      return generateTicketBatch(params, batchId);
+    });
+
+    // Step 3: Find a customer to use — try org-scoped first, fall back to any
+    const customerId = await step.run("resolve-customer", async () => {
+      if (params.customerId) return params.customerId;
+      const customer =
+        (params.orgId
+          ? await prisma.customer.findFirst({ where: { orgId: params.orgId }, orderBy: { createdAt: "asc" } })
+          : null) ??
+        (await prisma.customer.findFirst({ orderBy: { createdAt: "asc" } }));
+      return customer?.id ?? null;
+    });
+
+    if (!customerId) {
+      await prisma.generationBatch.update({
+        where: { id: batchId },
+        data: { status: "failed", errorMessage: "No customer found for org", completedAt: new Date() },
+      });
+      return { batchId, status: "failed" };
+    }
+
+    // Step 4: Create tickets in chunks of 10
+    const CHUNK_SIZE = 10;
+    let totalCreated = 0;
+
+    for (let i = 0; i < drafts.length; i += CHUNK_SIZE) {
+      const chunk = drafts.slice(i, i + CHUNK_SIZE);
+
+      await step.run(`create-tickets-chunk-${i}`, async () => {
+        for (const draft of chunk) {
+          const ticket = await prisma.ticket.create({
+            data: {
+              title: draft.title,
+              description: draft.description,
+              severity: draft.severity,
+              category: draft.category,
+              product: draft.product,
+              status: "open",
+              customerId,
+              orgId: params.orgId,
+            },
+          });
+
+          await prisma.generatedTicketMeta.create({
+            data: {
+              ticketId: ticket.id,
+              batchId,
+              trueRootCause: draft.trueRootCause,
+              trueCategory: draft.trueCategory,
+              trueSeverity: draft.trueSeverity,
+              affectedProduct: draft.affectedProduct,
+              injectedFaults: JSON.parse(JSON.stringify(draft.injectedFaults)),
+              scenario: draft.scenarioRole ? params.incidentScenario?.name ?? null : null,
+              scenarioRole: draft.scenarioRole ?? null,
+              difficulty: draft.difficulty,
+            },
+          });
+
+          // Fire ticket/created for clustering
+          await inngest.send({
+            name: "ticket/created",
+            data: { ticketId: ticket.id },
+          });
+
+          totalCreated++;
+        }
+
+        await prisma.generationBatch.update({
+          where: { id: batchId },
+          data: { totalCreated },
+        });
+      });
+    }
+
+    // Step 5: Finalize
+    await step.run("finalize-batch", async () => {
+      await prisma.generationBatch.update({
+        where: { id: batchId },
+        data: { status: "complete", completedAt: new Date(), totalCreated },
+      });
+    });
+
+    return { batchId, totalCreated, status: "complete" };
   }
 );

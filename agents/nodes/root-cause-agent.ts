@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
 import type { InvestigationState, Hypothesis } from "../state";
 
@@ -14,7 +14,9 @@ export async function rootCauseAgent(
   state: InvestigationState
 ): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
-  const model = "gpt-4o";
+  const model = state.evalModel ?? "gpt-4o";
+  const promptFile = "root-cause.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
@@ -26,15 +28,14 @@ export async function rootCauseAgent(
         hasIncidents: state.incidents.length > 0,
         hasDeployments: state.deployments.length > 0,
         hasKnowledge: state.knowledgeChunks.length > 0,
+        promptFile,
+        gitSha: getGitSha(),
+        model,
       },
     },
   });
 
   try {
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/root-cause.md"),
-      "utf-8"
-    );
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 

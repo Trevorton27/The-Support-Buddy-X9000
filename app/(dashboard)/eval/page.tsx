@@ -77,6 +77,9 @@ export default async function EvalPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{run.name}</span>
+                        <Badge variant="outline" className="text-xs shrink-0 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 font-mono">
+                          {run.model}
+                        </Badge>
                         <Badge
                           variant="outline"
                           className={`text-xs shrink-0 ${run.status === "complete" ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}

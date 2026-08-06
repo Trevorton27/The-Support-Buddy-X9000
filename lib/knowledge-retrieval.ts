@@ -135,6 +135,7 @@ async function rerankResults(
     if (!res.ok) return chunks;
 
     const scores = (await res.json()) as number[];
+    console.log("[HF knowledge-retrieval] raw scores from cross-encoder/ms-marco-MiniLM-L-6-v2:", scores);
     if (!Array.isArray(scores) || scores.length !== chunks.length) return chunks;
 
     rerankCache.set(cacheKey, { scores, expiry: Date.now() + 5 * 60 * 1000 });

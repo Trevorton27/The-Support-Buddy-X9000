@@ -8,7 +8,8 @@ const logger = createLogger("eval-runner");
 
 export async function runEvalSuite(
   evalRunId: string,
-  exampleIds?: string[]
+  exampleIds?: string[],
+  model?: string
 ): Promise<void> {
   const where = exampleIds && exampleIds.length > 0 ? { id: { in: exampleIds } } : {};
   const examples = await prisma.evalExample.findMany({ where });
@@ -67,7 +68,7 @@ export async function runEvalSuite(
 
     try {
       // Run investigation directly (bypassing Inngest)
-      await runInvestigation(ticket.id, run.id);
+      await runInvestigation(ticket.id, run.id, model);
       investigationRunId = run.id;
 
       // Load results

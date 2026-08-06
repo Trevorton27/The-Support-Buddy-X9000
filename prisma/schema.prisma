@@ -48,6 +48,7 @@ model Ticket {
   duplicateOf    Ticket?           @relation("TicketDuplicates", fields: [duplicateOfId], references: [id])
   duplicates     Ticket[]          @relation("TicketDuplicates")
   retrievalResults RetrievalResult[]
+  generatedMeta  GeneratedTicketMeta?
 
   @@index([orgId])
 }
@@ -206,6 +207,7 @@ model EvalRun {
   name        String
   triggeredBy String
   status      String    @default("running") // "running" | "complete" | "failed"
+  model       String    @default("gpt-4o")  // model used for reasoning nodes
   passRate    Float?
   avgScore    Float?
   startedAt   DateTime  @default(now())
@@ -230,6 +232,47 @@ model EvalResult {
 
   evalRun     EvalRun     @relation(fields: [evalRunId], references: [id])
   evalExample EvalExample @relation(fields: [evalExampleId], references: [id])
+}
+
+// Ticket Generation System
+model GenerationBatch {
+  id             String    @id @default(cuid())
+  name           String
+  status         String    @default("pending")  // "pending"|"running"|"complete"|"failed"
+  mode           String                          // "wizard"|"autonomous"|"incident"
+  params         Json                            // GenerationParams (full input config)
+  totalRequested Int
+  totalCreated   Int       @default(0)
+  orgId          String    @default("")
+  createdBy      String                          // Clerk userId
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  errorMessage   String?
+
+  metas GeneratedTicketMeta[]
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model GeneratedTicketMeta {
+  id              String    @id @default(cuid())
+  ticketId        String    @unique
+  batchId         String
+  trueRootCause   String                         // hidden ground truth
+  trueCategory    String
+  trueSeverity    String
+  affectedProduct String
+  injectedFaults  Json      @default("[]")       // string[]
+  scenario        String?                         // incident scenario name
+  scenarioRole    String?                         // "trigger"|"symptom"|"related"
+  difficulty      String    @default("medium")    // "easy"|"medium"|"hard"
+  scoreCache      Json?                           // TrainingScores
+  scoredAt        DateTime?
+  createdAt       DateTime  @default(now())
+
+  ticket Ticket          @relation(fields: [ticketId], references: [id])
+  batch  GenerationBatch @relation(fields: [batchId], references: [id])
 }
 
 // RAG Knowledge Base — KnowledgeDocument

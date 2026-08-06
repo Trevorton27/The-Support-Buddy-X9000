@@ -33,6 +33,7 @@ const InvestigationStateAnnotation = Annotation.Root({
   escalationNote: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
   guardrailsResult: Annotation<InvestigationState["guardrailsResult"]>({ reducer: (_, b) => b, default: () => null }), // Phase 2
   urgencyScore: Annotation<number | null>({ reducer: (_, b) => b, default: () => null }),
+  evalModel: Annotation<string | undefined>({ reducer: (_, b) => b, default: () => undefined }),
 });
 
 type GraphState = typeof InvestigationStateAnnotation.State;
@@ -54,7 +55,7 @@ async function parallelAnalysis(state: GraphState): Promise<Partial<GraphState>>
   } as Partial<GraphState>;
 }
 
-export async function runInvestigation(ticketId: string, runId: string): Promise<void> {
+export async function runInvestigation(ticketId: string, runId: string, evalModel?: string): Promise<void> {
   logger.info("Starting investigation", { ticketId, runId });
 
   await prisma.investigationRun.update({
@@ -89,6 +90,7 @@ export async function runInvestigation(ticketId: string, runId: string): Promise
       runId,
       ticket,
       customer: ticket.customer,
+      evalModel,
     });
 
     logger.info("Investigation graph complete", { ticketId, runId });

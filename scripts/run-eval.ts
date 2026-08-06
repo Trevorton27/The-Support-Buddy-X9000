@@ -11,6 +11,8 @@ async function main() {
   const args = process.argv.slice(2);
   const nameIdx = args.indexOf("--name");
   const name = nameIdx !== -1 ? args[nameIdx + 1] : `eval-${new Date().toISOString().slice(0, 10)}`;
+  const modelIdx = args.indexOf("--model");
+  const model = modelIdx !== -1 ? args[modelIdx + 1] : "gpt-4o";
 
   if (!name) {
     console.error("Usage: npx tsx scripts/run-eval.ts --name <name>");
@@ -31,12 +33,13 @@ async function main() {
       name,
       triggeredBy: "cli",
       status: "running",
+      model,
     },
   });
 
-  console.log(`Created eval run: ${run.id}`);
+  console.log(`Created eval run: ${run.id} (model: ${model})`);
 
-  await runEvalSuite(run.id);
+  await runEvalSuite(run.id, undefined, model);
 
   const completed = await prisma.evalRun.findUnique({
     where: { id: run.id },

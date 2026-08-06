@@ -48,6 +48,7 @@ export async function rerankChunks(
     if (!response.ok) return chunks;
 
     const scores = (await response.json()) as number[];
+    console.log("[HF reranker] raw scores from cross-encoder/ms-marco-MiniLM-L-6-v2:", scores);
 
     if (!Array.isArray(scores) || scores.length !== chunks.length) {
       return chunks;

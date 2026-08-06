@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage } from "@/lib/agent-utils";
+import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
 import { searchDocs } from "../tools/docs-tool";
 import { formatEvidenceBlock } from "@/lib/knowledge-retrieval";
 import type { InvestigationState, KnowledgeChunk } from "../state";
@@ -16,13 +16,15 @@ export async function knowledgeAgent(
 ): Promise<Partial<InvestigationState>> {
   const stepStart = Date.now();
   const model = "gpt-4o-mini";
+  const promptFile = "knowledge-retrieval.md";
+  const systemPrompt = readFileSync(join(process.cwd(), `agents/prompts/${promptFile}`), "utf-8");
 
   const step = await prisma.agentStep.create({
     data: {
       investigationRunId: state.runId,
       agentName: "knowledge-retrieval",
       status: "running",
-      input: { query: state.ticket.title },
+      input: { query: state.ticket.title, promptFile, gitSha: getGitSha() },
     },
   });
 
@@ -33,11 +35,6 @@ export async function knowledgeAgent(
 
     // Phase 4: searchDocs now includes reranking via HuggingFace cross-encoder
     const chunks = await searchDocs(query, 5);
-
-    const systemPrompt = readFileSync(
-      join(process.cwd(), "agents/prompts/knowledge-retrieval.md"),
-      "utf-8"
-    );
 
     const client = new OpenAI({ apiKey: getEnv().OPENAI_API_KEY });
 

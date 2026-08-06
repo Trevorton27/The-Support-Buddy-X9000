@@ -74,6 +74,9 @@ export default async function EvalRunPage({
       <div>
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{run.name}</h1>
+          <Badge variant="outline" className="font-mono text-purple-700 bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300">
+            {run.model}
+          </Badge>
           <Badge
             variant="outline"
             className={run.status === "complete" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"}

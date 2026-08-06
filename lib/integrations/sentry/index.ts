@@ -11,6 +11,7 @@ class MockSentryAdapter implements IIntegrationAdapter {
     return { ok: true, message: "Mock mode — no live connection", latencyMs: 0 };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getIssues(_orgSlug: string, _projectSlug: string): SentryIssue[] {
     return getMockSentryIssues();
   }

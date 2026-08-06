@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import type OpenAI from "openai";
 
 export interface TokenUsage {
@@ -29,4 +30,16 @@ export function estimateCostUsd(usage: TokenUsage, model: string): number {
 export function formatCostUsd(costUsd: number): string {
   if (costUsd < 0.001) return `<$0.001`;
   return `$${costUsd.toFixed(4)}`;
+}
+
+let _gitSha: string | undefined;
+
+export function getGitSha(): string {
+  if (_gitSha !== undefined) return _gitSha;
+  try {
+    _gitSha = execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    _gitSha = "unknown";
+  }
+  return _gitSha;
 }
