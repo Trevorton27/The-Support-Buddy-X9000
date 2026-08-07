@@ -4,7 +4,8 @@ import OpenAI from "openai";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { extractTokenUsage, getGitSha } from "@/lib/agent-utils";
+import { extractTokenUsage } from "@/lib/agent-utils";
+import { getGitSha } from "@/lib/git-sha";
 import { postEscalation } from "../tools/escalation-tool";
 import type { InvestigationState } from "../state";
 

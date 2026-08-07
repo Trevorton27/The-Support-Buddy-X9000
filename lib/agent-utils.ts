@@ -1,4 +1,3 @@
-import { execSync } from "child_process";
 import type OpenAI from "openai";
 
 export interface TokenUsage {
@@ -32,14 +31,3 @@ export function formatCostUsd(costUsd: number): string {
   return `$${costUsd.toFixed(4)}`;
 }
 
-let _gitSha: string | undefined;
-
-export function getGitSha(): string {
-  if (_gitSha !== undefined) return _gitSha;
-  try {
-    _gitSha = execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
-  } catch {
-    _gitSha = "unknown";
-  }
-  return _gitSha;
-}
