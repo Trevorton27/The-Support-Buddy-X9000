@@ -17,9 +17,12 @@ export default async function HomePage() {
             Multi-agent AI system
           </div>
           <h1 className="text-5xl font-bold tracking-tight">
+            Signal Ops AI
+          </h1>
+          <h3 className="text-2xl font-semibold text-slate-300">
             AI Support Operations
             <span className="text-blue-400"> Platform</span>
-          </h1>
+          </h3>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
             Automated support ticket investigation powered by a LangGraph multi-agent pipeline.
             Root cause analysis, customer context, knowledge retrieval, and drafted responses — in seconds.
