@@ -7,8 +7,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI Support Operations Platform",
-  description: "Multi-agent AI system for automated support ticket investigation",
+  title: "The Support Buddy X9000",
+  description: "AI-powered support mission control with intelligent work prioritization and multi-agent investigation",
 };
 
 // Runs synchronously before React hydration to prevent flash of wrong theme

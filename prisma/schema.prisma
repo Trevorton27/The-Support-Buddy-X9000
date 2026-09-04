@@ -42,6 +42,8 @@ model Ticket {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  assigneeId    String?
+
   customer       Customer          @relation(fields: [customerId], references: [id])
   investigations InvestigationRun[]
   incidents      IncidentTicket[]
@@ -49,6 +51,8 @@ model Ticket {
   duplicates     Ticket[]          @relation("TicketDuplicates")
   retrievalResults RetrievalResult[]
   generatedMeta  GeneratedTicketMeta?
+  messages       TicketMessage[]
+  workItems      WorkItem[]
 
   @@index([orgId])
 }
@@ -80,6 +84,7 @@ model InvestigationRun {
   steps            AgentStep[]
   approvalRequests ApprovalAudit[]
   retrievalResults RetrievalResult[]
+  workItems        WorkItem[]
 
   @@index([orgId])
 }
@@ -166,7 +171,8 @@ model Incident {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  tickets IncidentTicket[]
+  tickets   IncidentTicket[]
+  workItems WorkItem[]
 
   @@index([orgId])
 }
@@ -312,4 +318,124 @@ model RetrievalResult {
 
   ticket           Ticket?           @relation(fields: [ticketId], references: [id])
   investigationRun InvestigationRun? @relation(fields: [investigationRunId], references: [id])
+}
+
+// Mission Control: Work Items — canonical unit of responsibility
+model WorkItem {
+  id                 String    @id @default(cuid())
+  orgId              String
+  assigneeId         String?
+  type               String    // CUSTOMER_REPLY | INTERNAL_FOLLOW_UP | INVESTIGATION | ESCALATION | APPROVAL | INCIDENT_UPDATE | SCHEDULED_CHECK | DOCUMENTATION | MANUAL_TASK
+  status             String    @default("OPEN") // OPEN | IN_PROGRESS | WAITING_CUSTOMER | WAITING_INTERNAL | SNOOZED | COMPLETED | CANCELLED | NEEDS_CLASSIFICATION
+  title              String
+  summary            String?
+  requiredAction     String?
+  reason             String?
+  priorityScore      Float     @default(50) // 0-100
+  priorityBand       String    @default("MEDIUM") // URGENT | HIGH | MEDIUM | LOW
+  dueAt              DateTime?
+  snoozedUntil       DateTime?
+  waitingOn          String?
+  confidence         Float?    // 0-1
+  sourceType         String?
+  sourceId           String?
+  ticketId           String?
+  investigationRunId String?
+  incidentId         String?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  ticket           Ticket?           @relation(fields: [ticketId], references: [id])
+  investigationRun InvestigationRun? @relation(fields: [investigationRunId], references: [id])
+  incident         Incident?         @relation(fields: [incidentId], references: [id])
+  events           WorkItemEvent[]
+  signals          WorkSignal[]
+
+  @@index([orgId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([priorityScore])
+  @@index([snoozedUntil])
+  @@index([ticketId])
+}
+
+// Mission Control: Work Signals — immutable incoming events
+model WorkSignal {
+  id               String    @id @default(cuid())
+  idempotencyKey   String    @unique
+  sourceSystem     String
+  sourceEventId    String?
+  eventType        String
+  payload          Json
+  evidence         String?
+  processingStatus String    @default("pending") // pending | processing | processed | failed | skipped
+  extractionResult Json?
+  confidence       Float?
+  workItemId       String?
+  senderId         String?
+  recipientId      String?
+  orgId            String
+  receivedAt       DateTime  @default(now())
+  processedAt      DateTime?
+
+  workItem WorkItem? @relation(fields: [workItemId], references: [id])
+
+  @@index([orgId])
+  @@index([processingStatus])
+}
+
+// Mission Control: Work Item Events — immutable audit trail
+model WorkItemEvent {
+  id            String    @id @default(cuid())
+  workItemId    String
+  eventType     String    // created | assigned | reprioritized | snoozed | resumed | completed | cancelled | delegated | status_changed | waiting_set | waiting_cleared | ai_accepted | ai_rejected | corrected
+  actorId       String?
+  actorType     String    @default("system") // user | system | ai
+  previousValue Json?
+  newValue      Json?
+  note          String?
+  createdAt     DateTime  @default(now())
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id])
+
+  @@index([workItemId])
+}
+
+// Mission Control: Agent Work Context — cached per-agent summary
+model AgentWorkContext {
+  id              String    @id @default(cuid())
+  agentId         String
+  orgId           String
+  summary         String
+  briefing        String?
+  activeCounts    Json      // { open, inProgress, waiting, snoozed }
+  topPriorities   Json      // WorkItem summaries
+  risks           Json?
+  recentChanges   Json?
+  sourceWorkItemIds Json    // string[]
+  modelVersion    String?
+  promptVersion   String?
+  refreshedAt     DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([agentId, orgId])
+}
+
+// Mission Control: Ticket Messages — conversation on tickets
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  content    String
+  authorType String   // customer | agent | system | ai
+  authorId   String?
+  authorName String?
+  channel    String   @default("web") // web | email | slack | zendesk | api
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
 }

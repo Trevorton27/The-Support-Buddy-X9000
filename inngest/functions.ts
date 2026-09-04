@@ -6,6 +6,11 @@ import { getSlackAdapter } from "@/lib/integrations/slack";
 import { createLogger } from "@/lib/logger";
 import { generateTicketBatch } from "@/lib/generation/ticket-generator";
 import type { GenerationParams } from "@/lib/generation/types";
+import { extractAction, reconcileSignal } from "@/lib/signal-processor";
+import { calculatePriority } from "@/lib/priority-engine";
+import { createWorkItem, resumeWorkItem, completeWorkItem } from "@/lib/work-items";
+import { refreshWorkContext } from "@/lib/work-context";
+import { generateBriefing } from "@/lib/shift-briefing";
 
 const logger = createLogger("inngest-function");
 
@@ -28,18 +33,34 @@ export const runInvestigationFunction = inngest.createFunction(
       await runInvestigation(ticketId, runId);
     });
 
-    // Step 2: Mark as awaiting human approval
+    // Step 2: Mark as awaiting human approval + create APPROVAL work item
     await step.run("set-awaiting-approval", async () => {
-      await prisma.investigationRun.update({
+      const run = await prisma.investigationRun.update({
         where: { id: runId },
         data: {
           status: "awaiting_approval",
           approvalStatus: "pending",
         },
+        include: { ticket: true },
       });
       await prisma.ticket.update({
         where: { id: ticketId },
         data: { status: "in_progress" },
+      });
+
+      // Create APPROVAL work item
+      await createWorkItem({
+        orgId: run.orgId,
+        type: "APPROVAL",
+        title: `Review investigation: ${run.ticket.title}`,
+        summary: `Investigation complete for ticket "${run.ticket.title}". Draft response ready for review.`,
+        requiredAction: "Review and approve/reject the drafted response",
+        investigationRunId: runId,
+        ticketId,
+        actorType: "system",
+        priorityContext: {
+          severity: run.ticket.severity === "critical" ? "critical" : run.ticket.severity === "high" ? "high" : "medium",
+        },
       });
     });
 
@@ -111,6 +132,14 @@ export const runInvestigationFunction = inngest.createFunction(
         await slack.postApprovalSummary(runId, action, run.ticket.title);
       }
 
+      // Complete the APPROVAL work item
+      const approvalWorkItem = await prisma.workItem.findFirst({
+        where: { investigationRunId: runId, type: "APPROVAL", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+      });
+      if (approvalWorkItem) {
+        await completeWorkItem(approvalWorkItem.id, actorId, `${action}: ${note || "no note"}`);
+      }
+
       logger.info("Investigation approval processed", { runId, action, actorId });
     });
 
@@ -179,6 +208,18 @@ export const clusterTicketsFunction = inngest.createFunction(
           await prisma.incidentTicket.createMany({
             data: cluster.ticketIds.map((ticketId) => ({ incidentId: incident.id, ticketId })),
             skipDuplicates: true,
+          });
+
+          // Create INCIDENT_UPDATE work item
+          await createWorkItem({
+            orgId: incident.orgId,
+            type: "INCIDENT_UPDATE",
+            title: `New incident: ${incident.title}`,
+            summary: `Auto-detected: ${cluster.ticketIds.length} related tickets clustered into new incident.`,
+            requiredAction: "Review incident, update status page, coordinate response",
+            incidentId: incident.id,
+            actorType: "system",
+            priorityContext: { severity: "high", incidentSeverity: "P1" },
           });
 
           logger.info("Auto-created incident from cluster", {
@@ -299,5 +340,238 @@ export const batchGenerateTicketsFunction = inngest.createFunction(
     });
 
     return { batchId, totalCreated, status: "complete" };
+  }
+);
+
+// ─── Mission Control: Work Signal Processing ───
+
+export const processWorkSignalFunction = inngest.createFunction(
+  {
+    id: "process-work-signal",
+    name: "Process Work Signal",
+    retries: 2,
+    timeouts: { finish: "2m" },
+  },
+  { event: "work-signal/received" },
+  async ({ event, step }) => {
+    const { signalId } = event.data as { signalId: string };
+
+    // Step 1: Load signal
+    const signal = await step.run("load-signal", async () => {
+      const s = await prisma.workSignal.findUniqueOrThrow({ where: { id: signalId } });
+      await prisma.workSignal.update({
+        where: { id: signalId },
+        data: { processingStatus: "processing" },
+      });
+      return s;
+    });
+
+    // Step 2: Extract action via AI
+    const extraction = await step.run("extract-action", async () => {
+      return extractAction({
+        eventType: signal.eventType,
+        payload: signal.payload,
+        evidence: signal.evidence,
+        sourceSystem: signal.sourceSystem,
+      });
+    });
+
+    // Step 3: Reconcile signal to work item
+    const workItemId = await step.run("reconcile-signal", async () => {
+      return reconcileSignal(signalId, extraction, signal.orgId);
+    });
+
+    // Step 4: Recalculate priority if work item created
+    if (workItemId) {
+      await step.run("recalculate-priority", async () => {
+        const item = await prisma.workItem.findUnique({
+          where: { id: workItemId },
+          include: { ticket: { include: { customer: true } } },
+        });
+        if (!item) return;
+
+        const priority = calculatePriority({
+          severity: item.ticket?.severity,
+          customerTier: item.ticket?.customer?.plan,
+        });
+
+        await prisma.workItem.update({
+          where: { id: workItemId },
+          data: { priorityScore: priority.score, priorityBand: priority.band },
+        });
+      });
+    }
+
+    logger.info("Work signal processed", { signalId, workItemId });
+    return { signalId, workItemId };
+  }
+);
+
+export const recalculatePrioritiesFunction = inngest.createFunction(
+  {
+    id: "recalculate-priorities",
+    name: "Batch Recalculate Work Item Priorities",
+    retries: 1,
+    timeouts: { finish: "5m" },
+  },
+  { event: "work-items/recalculate" },
+  async ({ event, step }) => {
+    const { orgId } = event.data as { orgId: string };
+
+    await step.run("recalculate-all", async () => {
+      const items = await prisma.workItem.findMany({
+        where: {
+          orgId,
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        include: { ticket: { include: { customer: true } }, incident: true },
+      });
+
+      for (const item of items) {
+        const priority = calculatePriority({
+          severity: item.ticket?.severity,
+          customerTier: item.ticket?.customer?.plan,
+          incidentSeverity: item.incident?.severity,
+        });
+
+        await prisma.workItem.update({
+          where: { id: item.id },
+          data: { priorityScore: priority.score, priorityBand: priority.band },
+        });
+      }
+
+      logger.info("Batch priority recalculation complete", { orgId, count: items.length });
+    });
+  }
+);
+
+export const refreshAgentContextFunction = inngest.createFunction(
+  {
+    id: "refresh-agent-context",
+    name: "Refresh Agent Work Context",
+    retries: 1,
+    timeouts: { finish: "1m" },
+  },
+  { event: "work-context/refresh.requested" },
+  async ({ event, step }) => {
+    const { agentId, orgId } = event.data as { agentId: string; orgId: string };
+
+    await step.run("refresh-context", async () => {
+      await refreshWorkContext(agentId, orgId);
+    });
+
+    logger.info("Agent context refreshed", { agentId, orgId });
+  }
+);
+
+export const activateScheduledFollowupsFunction = inngest.createFunction(
+  {
+    id: "activate-scheduled-followups",
+    name: "Activate Snoozed Work Items",
+    retries: 1,
+    timeouts: { finish: "2m" },
+  },
+  { cron: "*/5 * * * *" },
+  async ({ step }) => {
+    const activated = await step.run("activate-snoozed", async () => {
+      const snoozed = await prisma.workItem.findMany({
+        where: {
+          status: "SNOOZED",
+          snoozedUntil: { lte: new Date() },
+        },
+      });
+
+      let count = 0;
+      for (const item of snoozed) {
+        try {
+          await resumeWorkItem(item.id);
+          count++;
+        } catch (e) {
+          logger.warn("Failed to resume snoozed item", { id: item.id, error: (e as Error).message });
+        }
+      }
+      return count;
+    });
+
+    logger.info("Snoozed items activated", { count: activated });
+    return { activated };
+  }
+);
+
+export const generateShiftBriefingFunction = inngest.createFunction(
+  {
+    id: "generate-shift-briefing",
+    name: "Generate Shift Briefing",
+    retries: 1,
+    timeouts: { finish: "2m" },
+  },
+  { event: "shift-briefing/generate.requested" },
+  async ({ event, step }) => {
+    const { agentId, orgId } = event.data as { agentId: string; orgId: string };
+
+    await step.run("generate-briefing", async () => {
+      await generateBriefing(agentId, orgId);
+    });
+
+    logger.info("Shift briefing generated", { agentId, orgId });
+  }
+);
+
+export const detectStaleResponsibilitiesFunction = inngest.createFunction(
+  {
+    id: "detect-stale-responsibilities",
+    name: "Detect Stale Work Items",
+    retries: 1,
+    timeouts: { finish: "2m" },
+  },
+  { cron: "*/15 * * * *" },
+  async ({ step }) => {
+    const flagged = await step.run("detect-stale", async () => {
+      const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+
+      // Find IN_PROGRESS items with no events in last 4 hours
+      const staleItems = await prisma.workItem.findMany({
+        where: {
+          status: "IN_PROGRESS",
+          updatedAt: { lte: fourHoursAgo },
+        },
+        include: {
+          events: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      });
+
+      const trueStale = staleItems.filter((item) => {
+        const lastEvent = item.events[0];
+        return !lastEvent || lastEvent.createdAt < fourHoursAgo;
+      });
+
+      for (const item of trueStale) {
+        // Bump priority slightly
+        const newScore = Math.min(item.priorityScore + 5, 100);
+        await prisma.workItem.update({
+          where: { id: item.id },
+          data: { priorityScore: newScore },
+        });
+
+        await prisma.workItemEvent.create({
+          data: {
+            workItemId: item.id,
+            eventType: "reprioritized",
+            actorType: "system",
+            note: "Auto-bumped: no activity for 4+ hours",
+            previousValue: JSON.parse(JSON.stringify({ priorityScore: item.priorityScore })),
+            newValue: JSON.parse(JSON.stringify({ priorityScore: newScore })),
+          },
+        });
+      }
+
+      return trueStale.length;
+    });
+
+    logger.info("Stale responsibility detection complete", { flagged });
+    return { flagged };
   }
 );

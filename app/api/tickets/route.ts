@@ -133,5 +133,26 @@ export async function POST(request: NextRequest) {
     data: { ticketId: ticket.id },
   });
 
+  // Create WorkSignal for the new ticket and fire processing event
+  const signal = await prisma.workSignal.create({
+    data: {
+      idempotencyKey: `ticket-created-${ticket.id}`,
+      sourceSystem: "internal",
+      eventType: "ticket.created",
+      payload: JSON.parse(JSON.stringify({
+        ticketId: ticket.id,
+        title: ticket.title,
+        severity: ticket.severity,
+        customerId: ticket.customerId,
+      })),
+      orgId: ticket.orgId || "",
+    },
+  });
+
+  await inngest.send({
+    name: "work-signal/received",
+    data: { signalId: signal.id },
+  });
+
   return NextResponse.json({ ...ticket, duplicateOf: duplicateOfId ?? null }, { status: 201 });
 }

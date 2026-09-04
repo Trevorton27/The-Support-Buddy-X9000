@@ -192,18 +192,25 @@ knowledge-base/       # Markdown docs embedded into pgvector
 
 ```
 Customer          — tenant customer records
-Ticket            — support tickets; has incidents IncidentTicket[] relation
+Ticket            — support tickets; has assigneeId, messages TicketMessage[], workItems WorkItem[]
 InvestigationRun  — one per investigation; has approvalStatus, guardrailsResult,
-                    editedReply, reviewerNote, orgId
+                    editedReply, reviewerNote, orgId, workItems WorkItem[]
 AgentStep         — one per agent node; has tokenUsage, toolsCalled, confidenceScore
 ApprovalAudit     — HITL approval/rejection record with original+final draft
 KnowledgeChunk    — pgvector embeddings (Unsupported vector type — use $executeRaw)
-Incident          — clustered incident with status, severity, internalTimeline Json
+Incident          — clustered incident with status, severity, internalTimeline Json, workItems WorkItem[]
 IncidentTicket    — join table (Incident ↔ Ticket)
 IntegrationConfig — metadata for external integrations
 EvalExample       — golden test cases (bootstrapped from approved runs)
 EvalRun           — one eval run with aggregate pass rate
 EvalResult        — per-example scores (rootCause, evidence, tone, hallucination)
+WorkItem          — canonical unit of responsibility; type, status (state machine), priorityScore/Band,
+                    optional FKs to Ticket/InvestigationRun/Incident, events WorkItemEvent[]
+WorkSignal        — immutable incoming event; idempotencyKey unique, processingStatus,
+                    reconciled to WorkItem after AI extraction
+WorkItemEvent     — immutable audit trail for WorkItem lifecycle changes
+AgentWorkContext  — cached per-agent summary; @@unique([agentId, orgId])
+TicketMessage     — conversation messages on tickets; authorType (customer|agent|system|ai)
 ```
 
 ---
@@ -213,7 +220,7 @@ EvalResult        — per-example scores (rootCause, evidence, tone, hallucinati
 ### Server vs. Client Components
 
 - Default to **Server Components** — add `"use client"` only for interactivity
-- Client Components: `InvestigationPanel`, `AgentTimeline`, `AgentOutputCard`, `TicketList`, `StatusPageEditor`, `IntegrationCard`, `DemoReset`, `ReplyEditor`, `StepDetailDrawer`
+- Client Components: `InvestigationPanel`, `AgentTimeline`, `AgentOutputCard`, `TicketList`, `StatusPageEditor`, `IntegrationCard`, `DemoReset`, `ReplyEditor`, `StepDetailDrawer`, `PriorityQueue`, `WorkItemCard`, `WorkItemActions`, `ShiftBriefing`, `ResponsibilityMap`, `WorkAssistant`, `NeedsClassificationQueue`
 - `settings/page.tsx` is a **Server Component** — it reads `process.env` to determine live/mock status and passes `isLive` down to `IntegrationCard`
 - **Never** call `prisma` or `lib/env.ts` from a Client Component
 - **Never** import anything from `agents/` in a Client Component
@@ -376,6 +383,13 @@ JIRA_BASE_URL          # e.g. https://yourorg.atlassian.net
 - In dev: `npx inngest-cli@latest dev` in a separate terminal
 - Events fired with `inngest.send({ name: "...", data: {...} })`
 - Client in `inngest/client.ts` — import from there only
+- Mission Control functions:
+  - `processWorkSignalFunction` — `work-signal/received` → AI extraction → reconciliation → WorkItem
+  - `recalculatePrioritiesFunction` — `work-items/recalculate` → batch priority recalc for org
+  - `refreshAgentContextFunction` — `work-context/refresh.requested` → refresh AgentWorkContext
+  - `activateScheduledFollowupsFunction` — cron 5min → resume SNOOZED items past snoozedUntil
+  - `generateShiftBriefingFunction` — `shift-briefing/generate.requested` → AI briefing
+  - `detectStaleResponsibilitiesFunction` — cron 15min → bump priority on stale IN_PROGRESS items
 
 ---
 
@@ -411,6 +425,49 @@ JIRA_BASE_URL          # e.g. https://yourorg.atlassian.net
 - **`CorrelatedIncident` vs `Incident`** — `CorrelatedIncident` is the state interface in `agents/state.ts`; `Incident` is the Prisma DB model. Never confuse them.
 - **Inngest `waitForEvent` lost on restart** — the DB write in the approve API happens first, so UI always reflects correct state even if Inngest can't resume
 - **Eval in dev** — `lib/eval-runner.ts` creates ephemeral tickets under the first customer in the DB; these persist after eval runs
+
+---
+
+## Mission Control
+
+### Work Item State Machine
+
+```
+OPEN → IN_PROGRESS | SNOOZED | CANCELLED | NEEDS_CLASSIFICATION
+IN_PROGRESS → WAITING_CUSTOMER | WAITING_INTERNAL | COMPLETED | SNOOZED | CANCELLED | OPEN
+WAITING_CUSTOMER → IN_PROGRESS | OPEN | COMPLETED | CANCELLED
+WAITING_INTERNAL → IN_PROGRESS | OPEN | COMPLETED | CANCELLED
+SNOOZED → OPEN
+NEEDS_CLASSIFICATION → OPEN | IN_PROGRESS | CANCELLED
+COMPLETED → (terminal)
+CANCELLED → (terminal)
+```
+
+### Key Files
+
+- `lib/priority-engine.ts` — deterministic scoring (pure functions, no DB)
+- `lib/work-items.ts` — CRUD + state machine with audit trail
+- `lib/work-context.ts` — context builder for agent work summaries
+- `lib/signal-processor.ts` — AI action extraction + reconciliation
+- `lib/shift-briefing.ts` — AI-generated workload summaries
+- `app/(dashboard)/mission-control/page.tsx` — Server Component page
+- `components/mission-control/` — all client components
+
+### API Routes
+
+- `GET/POST /api/work-items` — list/create work items
+- `GET/PATCH /api/work-items/[id]` — single item CRUD
+- `POST /api/work-items/[id]/{complete,snooze,wait,resume,delegate,correct}` — actions
+- `GET /api/work-context` — cached context
+- `POST /api/work-context/refresh` — refresh context
+- `POST /api/work-context/chat` — AI work assistant
+- `GET/POST /api/work-signals` — list/receive signals
+- `POST /api/work-signals/simulate` — generate mock signals
+
+### Seeds
+
+- `npm run seed:work-items` — creates demo WorkItems, TicketMessages, WorkSignals, WorkItemEvents
+- Depends on base `npm run seed` having run first
 
 ---
 

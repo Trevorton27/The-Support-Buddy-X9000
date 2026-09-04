@@ -8,7 +8,7 @@ export async function POST() {
 
   const slack = getSlackAdapter();
   const ok = await slack.send({
-    text: `Support Ops AI — test message from ${slack.isLive ? "live" : "mock"} adapter`,
+    text: `The Support Buddy X9000 — test message from ${slack.isLive ? "live" : "mock"} adapter`,
   });
 
   return NextResponse.json({ ok, mode: slack.isLive ? "live" : "mock" });

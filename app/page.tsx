@@ -6,7 +6,7 @@ import { AboutModal } from "@/components/about-modal";
 
 export default async function HomePage() {
   const { userId } = await auth();
-  if (userId) redirect("/dashboard");
+  if (userId) redirect("/mission-control");
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center text-white px-4">
@@ -17,15 +17,15 @@ export default async function HomePage() {
             Multi-agent AI system
           </div>
           <h1 className="text-5xl font-bold tracking-tight">
-            Signal Ops AI
+            The Support Buddy X9000
           </h1>
           <h3 className="text-2xl font-semibold text-slate-300">
-            AI Support Operations
-            <span className="text-blue-400"> Platform</span>
+            Your AI-powered support
+            <span className="text-blue-400"> mission control</span>
           </h3>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Automated support ticket investigation powered by a LangGraph multi-agent pipeline.
-            Root cause analysis, customer context, knowledge retrieval, and drafted responses — in seconds.
+            AI-powered support mission control with intelligent work prioritization,
+            multi-agent investigation, and automated triage — all in one place.
           </p>
         </div>
 

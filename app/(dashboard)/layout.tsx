@@ -1,11 +1,12 @@
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { LayoutDashboard, Ticket, Search, Settings, Zap, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2, GraduationCap } from "lucide-react";
+import { LayoutDashboard, Ticket, Search, Settings, Bot, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2, GraduationCap, Target } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/db";
 
 const navItems = [
+  { href: "/mission-control", label: "Mission Control", icon: Target },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tickets", label: "Tickets", icon: Ticket },
   { href: "/investigations", label: "Investigations", icon: Search },
@@ -40,9 +41,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col">
         <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200 dark:border-slate-800">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
+            <Bot className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Support Ops AI</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm">The Support Buddy X9000</span>
         </div>
 
         {/* Org switcher */}

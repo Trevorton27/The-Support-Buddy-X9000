@@ -13,7 +13,7 @@ export class SlackClient implements IIntegrationAdapter {
   async testConnection(): Promise<IntegrationTestResult> {
     const start = Date.now();
     try {
-      const result = await this.send({ text: "Support Ops AI: connection test ✓" });
+      const result = await this.send({ text: "The Support Buddy X9000: connection test ✓" });
       return { ok: result, message: result ? "Webhook delivered" : "Webhook failed", latencyMs: Date.now() - start };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Send failed" };
@@ -31,7 +31,7 @@ export class SlackClient implements IIntegrationAdapter {
 
   async postApprovalSummary(runId: string, action: string, ticketTitle: string): Promise<void> {
     await this.send({
-      text: `*Support Ops AI — Investigation ${action}*`,
+      text: `*The Support Buddy X9000 — Investigation ${action}*`,
       blocks: [
         {
           type: "section",
