@@ -20,6 +20,9 @@ const envSchema = z.object({
   DATADOG_API_KEY: z.string().optional(),
   ZENDESK_API_TOKEN: z.string().optional(),
   ZENDESK_SUBDOMAIN: z.string().optional(),
+  // Devin AI: automated bug reproduction and code fixes
+  DEVIN_API_KEY: z.string().optional(),
+  DEVIN_DEFAULT_REPO: z.string().optional(),
 });
 
 function parseEnv() {

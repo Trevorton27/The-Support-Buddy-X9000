@@ -8,9 +8,12 @@ import { generateTicketBatch } from "@/lib/generation/ticket-generator";
 import type { GenerationParams } from "@/lib/generation/types";
 import { extractAction, reconcileSignal } from "@/lib/signal-processor";
 import { calculatePriority } from "@/lib/priority-engine";
-import { createWorkItem, resumeWorkItem, completeWorkItem } from "@/lib/work-items";
+import { createWorkItem, resumeWorkItem, completeWorkItem, transitionWorkItem } from "@/lib/work-items";
 import { refreshWorkContext } from "@/lib/work-context";
 import { generateBriefing } from "@/lib/shift-briefing";
+import { getDevinAdapter } from "@/lib/integrations/devin";
+import { mapDevinStatusToInternal } from "@/lib/integrations/devin/types";
+import { parseDevinResult } from "@/lib/integrations/devin/result-parser";
 
 const logger = createLogger("inngest-function");
 
@@ -573,5 +576,138 @@ export const detectStaleResponsibilitiesFunction = inngest.createFunction(
 
     logger.info("Stale responsibility detection complete", { flagged });
     return { flagged };
+  }
+);
+
+// ─── Devin AI: Poll Task Session ───
+
+export const pollDevinTaskFunction = inngest.createFunction(
+  {
+    id: "poll-devin-task",
+    name: "Poll Devin Task Session",
+    retries: 2,
+    timeouts: { finish: "3h" },
+  },
+  { event: "devin/task.created" },
+  async ({ event, step }) => {
+    const { devinTaskId } = event.data as { devinTaskId: string };
+
+    // Step 1: Create Devin session
+    const sessionId = await step.run("create-session", async () => {
+      const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+      const adapter = getDevinAdapter();
+
+      await prisma.devinTask.update({
+        where: { id: devinTaskId },
+        data: { status: "creating" },
+      });
+
+      const promptData = task.promptSnapshot as { prompt?: string };
+      const prompt = promptData.prompt ?? JSON.stringify(task.promptSnapshot);
+
+      const result = await adapter.createSession({ prompt });
+
+      await prisma.devinTask.update({
+        where: { id: devinTaskId },
+        data: {
+          devinSessionId: result.session_id,
+          sessionUrl: result.url,
+          status: "working",
+          startedAt: new Date(),
+        },
+      });
+
+      // Transition WorkItem to IN_PROGRESS
+      if (task.workItemId) {
+        try {
+          await transitionWorkItem(task.workItemId, "IN_PROGRESS", undefined, "ai", "Devin session started");
+        } catch { /* may already be in progress */ }
+      }
+
+      return result.session_id;
+    });
+
+    // Step 2: Poll loop — 2m intervals, max 90 polls (~3h)
+    const MAX_POLLS = 90;
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await step.sleep(`poll-wait-${i}`, "2m");
+
+      const pollResult = await step.run(`poll-${i}`, async () => {
+        const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+        if (task.status === "cancelled") return { done: true, status: "cancelled" };
+
+        const adapter = getDevinAdapter();
+        const session = await adapter.getSession(sessionId);
+        const internalStatus = mapDevinStatusToInternal(session.status_enum, session);
+        const terminal = ["finished", "failed", "expired"].includes(internalStatus);
+
+        const statusChanged = internalStatus !== task.status;
+        await prisma.devinTask.update({
+          where: { id: devinTaskId },
+          data: {
+            status: internalStatus,
+            pullRequestUrl: session.pull_request?.url ?? task.pullRequestUrl,
+            structuredResult: session.structured_output
+              ? JSON.parse(JSON.stringify(session.structured_output))
+              : task.structuredResult,
+            pollCount: { increment: 1 },
+            lastPolledAt: new Date(),
+            ...(terminal ? { completedAt: new Date() } : {}),
+          },
+        });
+
+        if (statusChanged && task.workItemId) {
+          await prisma.workItemEvent.create({
+            data: {
+              workItemId: task.workItemId,
+              eventType: "devin_status_changed",
+              actorType: "ai",
+              newValue: JSON.parse(JSON.stringify({
+                devinStatus: internalStatus,
+                devinSessionStatus: session.status_enum,
+              })),
+            },
+          });
+        }
+
+        return { done: terminal, status: internalStatus };
+      });
+
+      if (pollResult.done) break;
+    }
+
+    // Step 3: Parse final result
+    await step.run("finalize", async () => {
+      const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+      if (task.status === "cancelled") return;
+
+      const adapter = getDevinAdapter();
+      const session = await adapter.getSession(task.devinSessionId!);
+      const parsed = parseDevinResult(session, task.mode as "reproduce" | "fix");
+
+      await prisma.devinTask.update({
+        where: { id: devinTaskId },
+        data: {
+          verdict: parsed.verdict,
+          verdictReason: parsed.verdictReason,
+          pullRequestUrl: parsed.pullRequestUrl ?? task.pullRequestUrl,
+          structuredResult: JSON.parse(JSON.stringify(parsed)),
+          status: task.status === "working" ? "finished" : task.status,
+        },
+      });
+
+      // Complete WorkItem
+      if (task.workItemId) {
+        try {
+          await transitionWorkItem(
+            task.workItemId, "COMPLETED", undefined, "ai",
+            `Devin ${task.mode}: ${parsed.verdict}`
+          );
+        } catch { /* may already be completed/cancelled */ }
+      }
+    });
+
+    return { devinTaskId };
   }
 );

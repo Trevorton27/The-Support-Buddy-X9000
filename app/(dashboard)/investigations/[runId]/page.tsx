@@ -10,6 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRelativeTime, formatDuration } from "@/lib/utils";
 import Link from "next/link";
 import type { Hypothesis, GuardrailsResult } from "@/agents/state";
+import { ReproduceButton } from "@/components/devin/reproduce-button";
+import { FixButton } from "@/components/devin/fix-button";
+import { DevinTasksSection } from "@/components/devin/devin-tasks-section";
+import type { SerializedDevinTask } from "@/components/devin/devin-task-card";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -17,6 +21,14 @@ async function getRun(runId: string) {
     include: {
       ticket: { include: { customer: true } },
       steps: { orderBy: { startedAt: "asc" } },
+      devinTasks: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true, mode: true, status: true, verdict: true, verdictReason: true,
+          pullRequestUrl: true, repository: true, devinSessionId: true, sessionUrl: true,
+          startedAt: true, updatedAt: true, ticketId: true, investigationRunId: true,
+        },
+      },
     },
   });
 }
@@ -50,6 +62,19 @@ export default async function InvestigationRunPage({
 
   // Effective reply: human-edited takes precedence over AI draft
   const effectiveReply = run.editedReply || run.summary;
+
+  const TERMINAL_DEVIN = ["finished", "failed", "expired", "cancelled"];
+  const hasActiveReproduction = run.devinTasks.some(
+    (t) => t.mode === "reproduce" && !TERMINAL_DEVIN.includes(t.status)
+  );
+  const hasActiveFix = run.devinTasks.some(
+    (t) => t.mode === "fix" && !TERMINAL_DEVIN.includes(t.status)
+  );
+  const serializedDevinTasks: SerializedDevinTask[] = run.devinTasks.map((t) => ({
+    ...t,
+    startedAt: t.startedAt?.toISOString() ?? null,
+    updatedAt: t.updatedAt.toISOString(),
+  }));
 
   return (
     <div className="p-8 space-y-6 max-w-5xl">
@@ -154,6 +179,32 @@ export default async function InvestigationRunPage({
                 <pre className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded-lg p-4 overflow-auto max-h-64 whitespace-pre-wrap">
                   {run.escalationNote}
                 </pre>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Devin AI Actions */}
+          {(run.status === "complete" || run.status === "awaiting_approval") && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Devin AI</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <ReproduceButton
+                    ticketId={run.ticketId}
+                    investigationRunId={run.id}
+                    hasActiveTask={hasActiveReproduction}
+                  />
+                  {run.approvalStatus === "approved" && (
+                    <FixButton
+                      investigationRunId={run.id}
+                      ticketId={run.ticketId}
+                      hasActiveTask={hasActiveFix}
+                    />
+                  )}
+                </div>
+                <DevinTasksSection tasks={serializedDevinTasks} />
               </CardContent>
             </Card>
           )}

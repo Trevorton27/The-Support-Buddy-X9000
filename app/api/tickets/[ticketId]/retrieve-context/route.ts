@@ -56,20 +56,30 @@ export async function POST(
       .filter(Boolean)
       .join(" ");
 
-  const evidence = await retrieveKnowledge(query, {
-    ...options,
-    ticketId: ticket.id,
-    // Always write audit row for ticket-specific retrieval
-    skipAudit: false,
-  });
+  try {
+    const evidence = await retrieveKnowledge(query, {
+      ...options,
+      ticketId: ticket.id,
+      // Always write audit row for ticket-specific retrieval
+      skipAudit: false,
+    });
 
-  return NextResponse.json({
-    ticketId: ticket.id,
-    query,
-    evidence,
-    total: evidence.length,
-    ...(includeFormattedBlock
-      ? { formattedBlock: formatEvidenceBlock(evidence) }
-      : {}),
-  });
+    return NextResponse.json({
+      ticketId: ticket.id,
+      query,
+      evidence,
+      total: evidence.length,
+      ...(includeFormattedBlock
+        ? { formattedBlock: formatEvidenceBlock(evidence) }
+        : {}),
+    });
+  } catch (err) {
+    return NextResponse.json({
+      ticketId: ticket.id,
+      query,
+      evidence: [],
+      total: 0,
+      error: `Knowledge retrieval failed: ${(err as Error).message}`,
+    });
+  }
 }

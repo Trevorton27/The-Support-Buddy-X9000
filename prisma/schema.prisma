@@ -53,6 +53,7 @@ model Ticket {
   generatedMeta  GeneratedTicketMeta?
   messages       TicketMessage[]
   workItems      WorkItem[]
+  devinTasks     DevinTask[]
 
   @@index([orgId])
 }
@@ -85,6 +86,7 @@ model InvestigationRun {
   approvalRequests ApprovalAudit[]
   retrievalResults RetrievalResult[]
   workItems        WorkItem[]
+  devinTasks       DevinTask[]
 
   @@index([orgId])
 }
@@ -351,6 +353,7 @@ model WorkItem {
   incident         Incident?         @relation(fields: [incidentId], references: [id])
   events           WorkItemEvent[]
   signals          WorkSignal[]
+  devinTask        DevinTask?
 
   @@index([orgId])
   @@index([assigneeId])
@@ -421,6 +424,48 @@ model AgentWorkContext {
   updatedAt       DateTime  @updatedAt
 
   @@unique([agentId, orgId])
+}
+
+// Devin AI: Automated bug reproduction and code fixes
+model DevinTask {
+  id                 String    @id @default(cuid())
+  orgId              String
+  devinSessionId     String?   @unique
+  sessionUrl         String?
+  repository         String
+  branch             String?
+  mode               String    // "reproduce" | "fix"
+  status             String    @default("queued") // queued | creating | working | blocked | waiting | pr_ready | finished | failed | expired | cancelled
+  promptSnapshot     Json      // full prompt sent to Devin
+  structuredResult   Json?     // parsed result
+  pullRequestUrl     String?
+  errorMessage       String?
+  verdict            String?   // reproduce: REPRODUCED | UNABLE_TO_REPRODUCE | CONFIGURATION_ISSUE | PRODUCT_DEFECT | DOCUMENTATION_DEFECT | ADDITIONAL_INFORMATION_REQUIRED
+                               // fix: FIX_SUBMITTED | FIX_FAILED
+  verdictReason      String?
+  pollCount          Int       @default(0)
+  lastPolledAt       DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdBy          String    // Clerk userId
+
+  // Relations
+  ticketId           String?
+  investigationRunId String?
+  workItemId         String?   @unique
+
+  ticket             Ticket?           @relation(fields: [ticketId], references: [id])
+  investigationRun   InvestigationRun? @relation(fields: [investigationRunId], references: [id])
+  workItem           WorkItem?         @relation(fields: [workItemId], references: [id])
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([orgId])
+  @@index([status])
+  @@index([devinSessionId])
+  @@index([investigationRunId])
+  @@index([workItemId])
 }
 
 // Mission Control: Ticket Messages — conversation on tickets

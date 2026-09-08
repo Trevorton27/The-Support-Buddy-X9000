@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { WorkItemActions } from "./work-item-actions";
 import { PriorityExplanation } from "./priority-explanation";
 import { WaitingStateBadge } from "./waiting-state-badge";
+import { DevinTaskCard, type SerializedDevinTask } from "@/components/devin/devin-task-card";
 
 const TYPE_ICONS: Record<string, typeof MessageSquare> = {
   CUSTOMER_REPLY: MessageSquare,
@@ -50,6 +51,7 @@ export interface WorkItemData {
   ticket?: { id: string; title: string; severity: string; customer: { name: string; company: string; plan: string } } | null;
   incident?: { id: string; title: string; severity: string } | null;
   investigationRun?: { id: string; status: string } | null;
+  devinTask?: SerializedDevinTask | null;
 }
 
 interface WorkItemCardProps {
@@ -138,6 +140,7 @@ export function WorkItemCard({ item, onUpdate }: WorkItemCardProps) {
             </div>
           )}
           <PriorityExplanation score={item.priorityScore} band={item.priorityBand} />
+          {item.devinTask && <DevinTaskCard task={item.devinTask} />}
           <WorkItemActions item={item} onUpdate={onUpdate} />
         </div>
       )}

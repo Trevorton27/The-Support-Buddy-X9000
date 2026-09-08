@@ -56,6 +56,13 @@ const integrations = [
     envKey: "HUGGING_FACE_API_KEY",
     testEndpoint: undefined as string | undefined,
   },
+  {
+    name: "Devin",
+    type: "devin",
+    description: "Automated bug reproduction and code fixes via Cognition AI",
+    envKey: "DEVIN_API_KEY",
+    testEndpoint: "/api/integrations/devin/test",
+  },
 ];
 
 export default async function SettingsPage() {

@@ -33,10 +33,23 @@ export async function POST(request: NextRequest) {
   });
 
   // Fire Inngest event
-  await inngest.send({
-    name: "investigation/run.requested",
-    data: { ticketId, runId: run.id },
-  });
+  try {
+    await inngest.send({
+      name: "investigation/run.requested",
+      data: { ticketId, runId: run.id },
+    });
+  } catch (err) {
+    // Inngest dev server may not be running — update run status but still return the runId
+    // so the user can see the pending investigation
+    await prisma.investigationRun.update({
+      where: { id: run.id },
+      data: { status: "failed", errorMessage: `Failed to dispatch to Inngest: ${(err as Error).message}. Is the Inngest dev server running? (npx inngest-cli@latest dev)` },
+    });
+    return NextResponse.json({
+      runId: run.id,
+      warning: "Investigation created but Inngest event dispatch failed. Start the Inngest dev server: npx inngest-cli@latest dev",
+    }, { status: 201 });
+  }
 
   return NextResponse.json({ runId: run.id }, { status: 201 });
 }

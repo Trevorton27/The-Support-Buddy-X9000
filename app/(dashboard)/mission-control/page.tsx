@@ -24,6 +24,7 @@ export default async function MissionControlPage() {
         ticket: { select: { id: true, title: true, severity: true, customer: { select: { name: true, company: true, plan: true } } } },
         incident: { select: { id: true, title: true, severity: true } },
         investigationRun: { select: { id: true, status: true } },
+        devinTask: { select: { id: true, mode: true, status: true, verdict: true, pullRequestUrl: true, devinSessionId: true, repository: true, sessionUrl: true, startedAt: true, updatedAt: true, verdictReason: true } },
       },
       orderBy: { priorityScore: "desc" },
       take: 50,
@@ -72,6 +73,13 @@ export default async function MissionControlPage() {
     completedAt: item.completedAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
+    devinTask: item.devinTask
+      ? {
+          ...item.devinTask,
+          startedAt: item.devinTask.startedAt?.toISOString() ?? null,
+          updatedAt: item.devinTask.updatedAt.toISOString(),
+        }
+      : null,
   }));
 
   return (

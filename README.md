@@ -2,7 +2,9 @@
 
 A portfolio-grade multi-agent AI system for automated support ticket investigation. When a support ticket is submitted, a LangGraph-orchestrated pipeline of specialized AI agents runs in the background — classifying the ticket, analyzing logs, retrieving relevant runbooks via RAG, correlating incidents and deployments, generating root-cause hypotheses, drafting a customer reply, enforcing guardrails, and routing through a human-in-the-loop approval queue before delivery.
 
-Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ships with a production RAG knowledge base (heading-aware chunking, HuggingFace cross-encoder reranking, `[KB-N]` citation labels wired through every agent), a full eval system, incident clustering, real-time agent telemetry, and adapter-based external integrations (Slack, Sentry, Datadog, Zendesk).
+Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ships with a production RAG knowledge base (heading-aware chunking, HuggingFace cross-encoder reranking, `[KB-N]` citation labels wired through every agent), a full eval system, incident clustering, real-time agent telemetry, adapter-based external integrations (Slack, Sentry, Datadog, Zendesk), and a Devin AI integration for automated bug reproduction and code fixes.
+
+> **New to the platform?** Read the full **[User Manual](docs/USER_MANUAL.md)** for a guided tour of every screen and feature.
 
 **In this article**
 
@@ -14,6 +16,7 @@ Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ship
 - [HITL Approval Flow](#hitl-approval-flow)
 - [Guardrails](#guardrails)
 - [Incident Clustering](#incident-clustering)
+- [Devin AI Integration](#devin-ai-integration)
 - [Eval System](#eval-system)
 - [Database Schema](#database-schema)
 - [RAG Knowledge Base](#rag-knowledge-base)
@@ -38,6 +41,8 @@ Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ship
 10. Org members listed at `/team` via Clerk Organizations
 11. Browse the Knowledge Library at `/knowledge` — search, filter by source type, view documents with LLM summaries and chunk content
 12. On any ticket detail page, the **Knowledge Context** panel auto-retrieves relevant articles and runbooks with `[KB-N]` citation labels and similarity score bars; manual search available inline
+13. On a completed investigation, click **"Reproduce with Devin"** → Devin reproduces the bug in a sandboxed session → verdict appears in Mission Control
+14. After approving an investigation, click **"Send to Devin (Fix)"** → Devin creates a branch, implements a fix, opens a PR → PR link appears on the task card
 
 ---
 
@@ -114,7 +119,14 @@ signal-ops-ai-v1/
 │       │   └── [id]/
 │       │       ├── route.ts          # GET detail, PATCH status/severity
 │       │       └── tickets/route.ts  # POST — link ticket to incident
+│       ├── devin/
+│       │   └── tasks/                # GET list, POST create
+│       │       └── [taskId]/
+│       │           ├── route.ts      # GET — single task detail
+│       │           ├── cancel/       # POST — cancel task + stop Devin session
+│       │           └── message/      # POST — send message to Devin session
 │       ├── integrations/
+│       │   ├── devin/test/           # POST — test Devin API connection
 │       │   ├── slack/test/           # POST — test Slack webhook
 │       │   └── zendesk/
 │       │       ├── simulate/         # GET — create demo ticket via Zendesk mock
@@ -191,6 +203,11 @@ signal-ops-ai-v1/
 │   │   ├── knowledge-document-detail.tsx  # Doc view: metadata, summary, collapsible chunks (client)
 │   │   ├── ticket-context-panel.tsx  # Auto-retrieve + manual search panel on ticket detail (client)
 │   │   └── source-type-badge.tsx     # Colour-coded badge for all 8 source types
+│   ├── devin/
+│   │   ├── reproduce-button.tsx      # "Reproduce with Devin" button + confirmation (client)
+│   │   ├── fix-button.tsx            # "Send to Devin (Fix)" button + warning dialog (client)
+│   │   ├── devin-task-card.tsx       # Task status, verdict, PR link, cancel/message (client)
+│   │   └── devin-tasks-section.tsx   # List of DevinTaskCards for an investigation (client)
 │   ├── settings/
 │   │   ├── integration-card.tsx      # Live/mock indicator + test button (client component)
 │   │   └── demo-reset.tsx            # Reset button (client component)
@@ -202,7 +219,7 @@ signal-ops-ai-v1/
 │
 ├── inngest/
 │   ├── client.ts                     # Inngest client singleton + event types
-│   └── functions.ts                  # runInvestigationFunction (HITL) + clusterTicketsFunction
+│   └── functions.ts                  # runInvestigationFunction (HITL) + clusterTicketsFunction + pollDevinTaskFunction
 │
 ├── lib/
 │   ├── db.ts                         # Prisma client singleton (hot-reload safe)
@@ -225,7 +242,14 @@ signal-ops-ai-v1/
 │       ├── sentry/{client,mock,index}.ts
 │       ├── slack/{client,mock,index}.ts
 │       ├── datadog/{mock,index}.ts
-│       └── zendesk/{mock,index}.ts
+│       ├── zendesk/{mock,index}.ts
+│       └── devin/
+│           ├── types.ts             # DevinSession, IDevinAdapter, status mapping, Zod schemas
+│           ├── client.ts            # Live Devin API client (Bearer auth, 30s timeouts)
+│           ├── mock.ts              # Mock adapter (deterministic state cycling)
+│           ├── index.ts             # Factory: live if DEVIN_API_KEY set, mock otherwise
+│           ├── prompt-builder.ts    # buildReproductionPrompt(), buildFixPrompt() with PII redaction
+│           └── result-parser.ts     # parseDevinResult() with structured output → message → status fallback
 │
 ├── prisma/
 │   ├── schema.prisma                 # All models
@@ -241,10 +265,20 @@ signal-ops-ai-v1/
 │   ├── run-eval.ts                   # CLI eval runner
 │   └── export-eval-data.ts           # Bootstrap EvalExample rows from approved runs
 │
+├── docs/
+│   └── USER_MANUAL.md                # "A User's Manual: Getting To Know The Support Buddy X9000"
+│
 ├── __tests__/                        # Unit tests (Vitest)
 │   ├── utils.test.ts
 │   ├── guardrails-rules.test.ts
-│   └── agent-utils.test.ts
+│   ├── agent-utils.test.ts
+│   ├── devin-prompt-builder.test.ts
+│   ├── devin-result-parser.test.ts
+│   ├── devin-mock.test.ts
+│   ├── devin-types.test.ts
+│   └── ui/
+│       ├── devin-task-card.test.tsx
+│       └── devin-reproduce-button.test.tsx
 │
 ├── data/                             # Static JSON demo fixtures
 │   ├── customers.json
@@ -427,6 +461,53 @@ Manual clustering is also available at `/api/incidents/suggest` (GET) and `/inci
 
 ---
 
+## Devin AI Integration
+
+The platform integrates with [Cognition AI's Devin](https://devin.ai) to provide automated bug reproduction and narrowly scoped code fixes after human authorization.
+
+### Architecture
+
+```
+Investigation completes
+  │
+  ├─ User clicks "Reproduce with Devin"
+  │    └─► POST /api/devin/tasks { mode: "reproduce" }
+  │         ├─ Build prompt from investigation context (hypotheses, logs, KB chunks, deployments)
+  │         ├─ Create DevinTask (status: "queued") + WorkItem
+  │         └─ Fire Inngest "devin/task.created"
+  │              └─► pollDevinTaskFunction
+  │                   ├─ Step 1: Create Devin session via API
+  │                   ├─ Step 2: Poll every 2min (max 90 polls / ~3h)
+  │                   │    └─ Update status, verdict, PR URL on each poll
+  │                   └─ Step 3: Parse final result + complete WorkItem
+  │
+  └─ After approval: User clicks "Send to Devin (Fix)" (admin only)
+       └─► Same flow but with mode: "fix"
+            ├─ Prompt includes approved reply, reviewer notes, PR authorization
+            └─ Devin creates branch + opens PR (auto-merge NOT authorized)
+```
+
+### Modes
+
+| Mode | Trigger | Authorization | Output |
+|------|---------|--------------|--------|
+| **Reproduce** | Investigation complete or awaiting approval | Any authenticated user | Verdict (REPRODUCED / UNABLE_TO_REPRODUCE / etc.) |
+| **Fix** | Investigation approved | Admin role required | Pull Request URL |
+
+### Security
+
+- Prompts wrap all ticket/log/KB content in `--- BEGIN UNTRUSTED EVIDENCE ---` / `--- END UNTRUSTED EVIDENCE ---` delimiters with explicit injection warnings
+- PII (email, phone) redacted from customer context before prompt construction
+- No production credentials sent to Devin; no auto-merge capability
+- `DEVIN_API_KEY` accessed server-side only via `lib/env.ts`
+- All state changes produce `WorkItemEvent` audit trail records
+
+### Mock Mode
+
+When `DEVIN_API_KEY` is not set, the mock adapter simulates sessions that cycle `working → working → finished` with deterministic verdicts. No external API calls are made.
+
+---
+
 ## Eval System
 
 Eval runs execute the full agent graph directly (bypassing Inngest) against a set of golden `EvalExample` records, then score outputs with an LLM judge.
@@ -528,6 +609,17 @@ Incident
 
 IncidentTicket
   incidentId, ticketId        ← join table
+
+DevinTask
+  id, orgId, devinSessionId (unique), sessionUrl, repository, branch?
+  mode: "reproduce" | "fix"
+  status: "queued" | "creating" | "working" | "blocked" | "waiting" | "pr_ready" | "finished" | "failed" | "expired" | "cancelled"
+  promptSnapshot: Json, structuredResult: Json?
+  pullRequestUrl?, verdict?, verdictReason?, errorMessage?
+  pollCount, lastPolledAt?, startedAt?, completedAt?
+  createdBy                   ← Clerk userId
+  ticketId?, investigationRunId?, workItemId? (unique)
+  └── belongs to Ticket?, InvestigationRun?, WorkItem?
 
 IntegrationConfig
   id, name, enabled, webhookUrl?, metadata: Json?
@@ -746,6 +838,8 @@ All integrations fall back to mock adapters when env vars are absent — no code
 | `ZENDESK_API_TOKEN` + `ZENDESK_SUBDOMAIN` | Zendesk ticket import webhook (fallback: mock) |
 | `GITHUB_TOKEN` + `GITHUB_ESCALATION_REPO` | Escalation agent creates GitHub Issues |
 | `JIRA_API_TOKEN` + `JIRA_BASE_URL` + `JIRA_PROJECT_KEY` | Escalation agent creates Jira tickets |
+| `DEVIN_API_KEY` | Automated bug reproduction and code fixes via Cognition AI (fallback: mock adapter) |
+| `DEVIN_DEFAULT_REPO` | Default repository URL for Devin tasks (e.g. `https://github.com/your-org/your-repo`) |
 | `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` | Required in production (default: `"local"` in dev) |
 
 ---

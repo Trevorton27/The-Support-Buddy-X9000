@@ -10,6 +10,7 @@ import {
   activateScheduledFollowupsFunction,
   generateShiftBriefingFunction,
   detectStaleResponsibilitiesFunction,
+  pollDevinTaskFunction,
 } from "@/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -24,5 +25,6 @@ export const { GET, POST, PUT } = serve({
     activateScheduledFollowupsFunction,
     generateShiftBriefingFunction,
     detectStaleResponsibilitiesFunction,
+    pollDevinTaskFunction,
   ],
 });
