@@ -22,6 +22,8 @@ const runStatusStyles: Record<string, string> = {
   complete:          "text-green-700 bg-green-50 border-green-200",
   failed:            "text-red-600 bg-red-50 border-red-200",
   awaiting_approval: "text-amber-700 bg-amber-50 border-amber-200",
+  paused:            "text-orange-600 bg-orange-50 border-orange-200",
+  cancelled:         "text-slate-500 bg-slate-50 border-slate-200",
 };
 
 export function InvestigationPanel({ ticket, latestRun }: InvestigationPanelProps) {
@@ -99,14 +101,15 @@ export function InvestigationPanel({ ticket, latestRun }: InvestigationPanelProp
               </Button>
             )}
 
-            {latestRun.status === "running" && (
+            {(latestRun.status === "running" || latestRun.status === "paused" || latestRun.status === "cancelled" || latestRun.status === "failed") && (
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full"
                 onClick={() => router.push(`/investigations/${latestRun.id}`)}
               >
-                View Live Progress
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                {latestRun.status === "running" ? "View Live Progress" : "View Investigation"}
               </Button>
             )}
           </div>

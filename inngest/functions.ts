@@ -36,6 +36,21 @@ export const runInvestigationFunction = inngest.createFunction(
       await runInvestigation(ticketId, runId);
     });
 
+    // Step 1.5: Check if user paused/cancelled while graph was running
+    const shouldContinue = await step.run("check-control-status", async () => {
+      const current = await prisma.investigationRun.findUnique({
+        where: { id: runId },
+        select: { status: true },
+      });
+      if (current?.status === "cancelled" || current?.status === "paused") {
+        logger.info("Investigation stopped by user", { runId, status: current.status });
+        return false;
+      }
+      return true;
+    });
+
+    if (!shouldContinue) return { ticketId, runId, status: "stopped" };
+
     // Step 2: Mark as awaiting human approval + create APPROVAL work item
     await step.run("set-awaiting-approval", async () => {
       const run = await prisma.investigationRun.update({

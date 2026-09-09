@@ -14,6 +14,7 @@ import { ReproduceButton } from "@/components/devin/reproduce-button";
 import { FixButton } from "@/components/devin/fix-button";
 import { DevinTasksSection } from "@/components/devin/devin-tasks-section";
 import type { SerializedDevinTask } from "@/components/devin/devin-task-card";
+import { InvestigationActions } from "@/components/agents/investigation-actions";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -39,6 +40,8 @@ const statusColor: Record<string, string> = {
   pending:           "text-slate-700 bg-slate-50 border-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700",
   failed:            "text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/40 dark:border-red-800",
   awaiting_approval: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/40 dark:border-amber-800",
+  paused:            "text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950/40 dark:border-orange-800",
+  cancelled:         "text-slate-500 bg-slate-50 border-slate-200 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700",
 };
 
 export default async function InvestigationRunPage({
@@ -102,6 +105,7 @@ export default async function InvestigationRunPage({
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${statusColor[run.status] ?? statusColor.pending}`}>
             {run.status.replace(/_/g, " ")}
           </span>
+          <InvestigationActions runId={run.id} status={run.status} />
           {run.approvalStatus === "pending" && (
             <Link
               href={`/approvals/${run.id}`}

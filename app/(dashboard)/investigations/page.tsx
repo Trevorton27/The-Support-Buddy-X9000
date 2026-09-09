@@ -22,6 +22,8 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
   running: "secondary",
   pending: "outline",
   failed: "destructive",
+  paused: "outline",
+  cancelled: "outline",
 };
 
 export default async function InvestigationsPage() {

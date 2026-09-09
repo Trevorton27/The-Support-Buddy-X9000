@@ -271,6 +271,7 @@ export function AgentTimeline({ steps, runId, runStatus }: AgentTimelineProps) {
 
   const stepMap = new Map(steps.map((s) => [s.agentName, s]));
   const isActive = runStatus === "running" || runStatus === "pending";
+  const isPausedOrCancelled = runStatus === "paused" || runStatus === "cancelled";
   let parallelGroupOpen = false;
 
   return (
@@ -333,6 +334,7 @@ export function AgentTimeline({ steps, runId, runStatus }: AgentTimelineProps) {
                       {status === "running" && step?.startedAt && <ElapsedTimer startedAt={step.startedAt} />}
                       {status === "failed" && <span className="text-red-500">Failed</span>}
                       {isGhost && isActive && <span className="text-slate-400">Queued</span>}
+                      {isGhost && isPausedOrCancelled && <span className="text-slate-400">{runStatus === "paused" ? "Paused" : "Cancelled"}</span>}
                       {step && status === "complete" && (
                         <span className="text-xs text-slate-300 dark:text-slate-600 group-hover:text-blue-400 transition-colors">View details →</span>
                       )}
