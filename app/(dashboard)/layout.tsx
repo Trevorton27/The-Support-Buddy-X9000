@@ -1,7 +1,7 @@
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { LayoutDashboard, Ticket, Search, Settings, Bot, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2, GraduationCap, Target } from "lucide-react";
+import { LayoutDashboard, Ticket, Search, Settings, Bot, ClipboardCheck, AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2, GraduationCap, Target, Bug } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { prisma } from "@/lib/db";
 
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/training", label: "Training", icon: GraduationCap },
   { href: "/eval", label: "Eval", icon: FlaskConical },
   { href: "/team", label: "Team", icon: Users },
+  { href: "/bug-generator", label: "Bug Generator", icon: Bug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
