@@ -16,8 +16,10 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
   const page = parseInt(searchParams.get("page") || "1");
 
-  const where: Record<string, unknown> = { orgId };
-  if (assigneeId && assigneeId !== "all") where.assigneeId = assigneeId;
+  const where: Record<string, unknown> = { orgId: orgId ? { in: [orgId, ""] } : "" };
+  if (assigneeId && assigneeId !== "all") {
+    where.OR = [{ assigneeId }, { assigneeId: null }];
+  }
   if (status) where.status = status;
   if (type) where.type = type;
   if (priorityBand) where.priorityBand = priorityBand;

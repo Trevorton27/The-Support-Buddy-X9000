@@ -12,12 +12,13 @@ export default async function MissionControlPage() {
   if (!userId) redirect("/sign-in");
 
   const terminalStatuses = ["COMPLETED", "CANCELLED"];
+  const orgFilter = orgId ? { orgId: { in: [orgId, ""] } } : { orgId: "" };
 
   const [workItems, statusCounts, pendingApprovals] = await Promise.all([
     prisma.workItem.findMany({
       where: {
-        orgId: orgId ?? "",
-        assigneeId: userId,
+        ...orgFilter,
+        OR: [{ assigneeId: userId }, { assigneeId: null }],
         status: { notIn: terminalStatuses },
       },
       include: {
@@ -31,19 +32,19 @@ export default async function MissionControlPage() {
     }),
     prisma.workItem.groupBy({
       by: ["status"],
-      where: { orgId: orgId ?? "", assigneeId: userId },
+      where: { ...orgFilter, OR: [{ assigneeId: userId }, { assigneeId: null }] },
       _count: true,
     }),
     prisma.investigationRun.count({
-      where: { orgId: orgId ?? "", approvalStatus: "pending" },
+      where: { ...({ orgId: orgId ? { in: [orgId, ""] } : "" }), approvalStatus: "pending" },
     }),
   ]);
 
   // Also get recently completed for the responsibility map
   const recentlyCompleted = await prisma.workItem.count({
     where: {
-      orgId: orgId ?? "",
-      assigneeId: userId,
+      ...orgFilter,
+      OR: [{ assigneeId: userId }, { assigneeId: null }],
       status: "COMPLETED",
       completedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     },

@@ -21,7 +21,7 @@ export async function POST(
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
-  if (task.orgId !== orgId) {
+  if (task.orgId && task.orgId !== orgId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (TERMINAL_STATUSES.includes(task.status as typeof TERMINAL_STATUSES[number])) {

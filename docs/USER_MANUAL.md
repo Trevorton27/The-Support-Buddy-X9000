@@ -22,7 +22,9 @@ Welcome to **The Support Buddy X9000** — an AI-powered support operations plat
 14. [Settings](#14-settings)
 15. [Admin Panel](#15-admin-panel)
 16. [Devin AI Integration](#16-devin-ai-integration)
-17. [Glossary](#17-glossary)
+17. [Bug Generator](#17-bug-generator)
+18. [Demo Product Repository](#18-demo-product-repository)
+19. [Glossary](#19-glossary)
 
 ---
 
@@ -59,6 +61,7 @@ The sidebar is your primary navigation. It's always visible on the left side of 
 | Graduation | **Training** | Practice mode with scored investigations |
 | Flask | **Eval** | Evaluation system for agent quality |
 | Users | **Team** | Organization members |
+| Bug | **Bug Generator** | Inject/revert test bugs in the demo product repo |
 | Gear | **Settings** | Model info, integrations, demo reset |
 | Shield | **Admin** | System administration (admins only) |
 
@@ -134,7 +137,7 @@ The ticket detail page is divided into sections:
 Shows the 50 most recent investigation runs, newest first. Each row displays:
 
 - Ticket title and customer company
-- **Status badge:** pending (gray), running (blue), awaiting_approval (amber), complete (green), failed (red)
+- **Status badge:** pending (gray), running (blue), awaiting_approval (amber), complete (green), failed (red), paused (orange), cancelled (gray)
 - Number of agent steps completed
 - Total duration
 - When it started
@@ -150,7 +153,20 @@ This is the most detailed page in the platform. It shows exactly what the AI age
 **Header:**
 - Ticket title, customer info, plan tier
 - Investigation status badge
+- **Investigation Controls** — contextual action buttons next to the status badge (see below)
 - If awaiting approval, a "Pending approval →" link to the review page
+
+**Investigation Controls:**
+
+Depending on the current status, you'll see action buttons to control the investigation:
+
+| Button | Available When | What It Does |
+|--------|----------------|--------------|
+| **Pause** | running, pending, awaiting_approval | Pauses the investigation. The Inngest background job will stop after its current step completes. Pipeline steps show "Paused" instead of "Queued". |
+| **Cancel** | running, pending, awaiting_approval, paused | Cancels the investigation permanently. Records who cancelled it and when. |
+| **Restart** | failed, cancelled, paused, complete | Resets the investigation — deletes all agent steps and re-fires the pipeline from scratch. Useful after fixing an API key issue, OpenAI credit exhaustion, or other transient failures. |
+
+All actions take effect immediately in the database. If the Inngest background job is mid-execution, it checks for pause/cancel status between the graph execution step and the approval step.
 
 **Pipeline Timing Bar:**
 Appears for completed investigations. A Gantt-style horizontal bar chart showing how long each agent step took and which ran in parallel. Hover over segments to see exact durations.
@@ -661,13 +677,144 @@ When `DEVIN_API_KEY` is not set, the platform uses a mock adapter that simulates
 
 ---
 
-## 17. Glossary
+## 17. Bug Generator
+
+**Route:** `/bug-generator`
+
+The Bug Generator lets you inject and revert reproducible bugs in the companion **Demo Product Repository** — a separate codebase that represents the fictional SaaS product your customers are filing tickets about.
+
+This is the key tool for testing the full Devin AI loop: inject a bug, create a ticket, investigate it, and let Devin reproduce and fix it.
+
+### Repository Status
+
+At the top of the page, a status card shows whether the Demo Product Repository is connected. The platform looks for it at `../support-buddy-demo-product` relative to the project root, or at the path specified by the `DEMO_PRODUCT_REPO_PATH` environment variable.
+
+### Bug Templates
+
+Templates are grouped by service. Each template card shows:
+
+- **Title** — What the bug does
+- **Service** — Which service in the demo repo is affected (e.g., `auth-service`, `webhook-dispatcher`)
+- **Severity** — critical, high, medium, or low
+- **Difficulty** — easy, medium, or hard (how many lines the fix requires)
+- **Category** — authentication, data, integration, performance, or configuration
+- **Active indicator** — Red "Active" badge if the bug is currently injected
+
+### Available Bug Templates
+
+| Template | Service | Severity | What Goes Wrong |
+|----------|---------|----------|-----------------|
+| Certificate region mismatch | auth-service | critical | EU users get the US signing certificate, failing SAML validation |
+| Stale org context | auth-service | high | Switching organizations returns the old org's session data |
+| Legacy header ignored | webhook-dispatcher | high | `X-Webhook-Sig` header not checked after rename to `X-Signature-256` |
+| Hardcoded timeout | order-service | critical | Query timeout stuck at 3s despite config change to 10s |
+| Key propagation race | billing-service | critical | Newly rotated API keys rejected during async activation window |
+| Burst double-counting | rate-limiter | medium | Burst requests charged at multiplier rate, draining limits 5x faster |
+| Pool scaling ignored | database-client | high | Pool size not divided by instance count — 20 instances exhaust DB |
+
+### Actions
+
+Each template has action buttons:
+
+| Button | What It Does |
+|--------|--------------|
+| **Inject Bug** | Replaces the correct code with the buggy version in the demo repo. Writes a regression test that will fail. |
+| **Inject + Create Ticket** | Same as above, plus creates a matching support ticket in The Support Buddy X9000 with realistic title, description, severity, and product fields. |
+| **Revert Fix** | Replaces the buggy code with the correct version. Use this to reset after Devin (or a developer) has fixed the bug. |
+
+### End-to-End Testing Loop
+
+The recommended workflow for testing the full platform:
+
+```
+1. Open Bug Generator → click "Inject + Create Ticket" on a template
+2. Go to Tickets → find the new ticket
+3. Click "Run Investigation" → watch the AI pipeline analyze it
+4. Go to Approvals → review and approve the AI's draft reply
+5. On the investigation page → click "Reproduce with Devin"
+6. Wait for Devin to confirm the bug
+7. Click "Send to Devin (Fix)" → Devin submits a PR
+8. Review and merge the PR on GitHub
+9. Return to Bug Generator → click "Revert Fix" to reset for next test
+```
+
+---
+
+## 18. Demo Product Repository
+
+The **Demo Product Repository** ([GitHub](https://github.com/Trevorton27/support-buddy-demo-product)) is a separate TypeScript monorepo that represents the fictional SaaS product supported by The Support Buddy X9000.
+
+### Purpose
+
+Support tickets in The Support Buddy X9000 describe real bugs — SAML authentication failures, webhook delivery errors, database connection exhaustion, etc. The demo product repo contains the **actual source code** where those bugs live, giving Devin AI a real codebase to clone, investigate, and fix.
+
+### Structure
+
+```
+support-buddy-demo-product/
+├── services/
+│   ├── auth-service/          — SAML SSO, JWT, session management
+│   ├── order-service/         — Order processing, /v2/orders API
+│   ├── webhook-dispatcher/    — Webhook delivery + HMAC signatures
+│   ├── billing-service/       — API key management
+│   ├── rate-limiter/          — Token bucket rate limiting
+│   └── database-client/       — Connection pool wrapper
+├── packages/
+│   └── shared-config/         — Shared TypeScript types
+├── AGENTS.md                  — Instructions for Devin AI
+└── package.json
+```
+
+### How defects work
+
+Each service contains:
+- **Real TypeScript code** with a subtle, realistic bug
+- **Failing tests** that prove the bug exists and describe expected behavior
+- **A narrow fix** (1–5 lines) that resolves the issue
+
+The seeded defects map directly to The Support Buddy X9000's demo data:
+
+| Support Ticket | Deployment | Service | Bug |
+|----------------|------------|---------|-----|
+| TKT-002: SAML SSO failing for EU users | auth-service v1.9.5 | `auth-service` | Wrong cert for region |
+| TKT-004: Webhook 30% failure rate | webhook-dispatcher v3.1.2 | `webhook-dispatcher` | Legacy header ignored |
+| TKT-001: API 500 errors on /v2/orders | order-service v2.4.1 | `order-service` | Hardcoded timeout |
+| TKT-005: Billing key rotation 401s | billing-service v4.0.3 | `billing-service` | Pending key rejection |
+| TKT-006: Rate limit at 200 not 1000 | rate-limiter v2.2.0 | `rate-limiter` | Burst double-count |
+| TKT-003: DB connection pool exhaustion | database-proxy pgbouncer-1.21.0 | `database-client` | No instance scaling |
+
+### Running tests
+
+```bash
+cd support-buddy-demo-product
+npm install
+npm test          # 32 tests: 21 pass, 11 fail (the seeded bugs)
+```
+
+### Connecting it
+
+Add to The Support Buddy X9000's `.env.local`:
+
+```bash
+# Local path for Bug Generator file operations
+DEMO_PRODUCT_REPO_PATH=/path/to/support-buddy-demo-product
+
+# GitHub URL for Devin AI to clone
+DEVIN_DEFAULT_REPO=https://github.com/Trevorton27/support-buddy-demo-product
+```
+
+---
+
+## 19. Glossary
 
 | Term | Definition |
 |------|-----------|
 | **Agent Step** | One node in the investigation pipeline (e.g., intake, log analysis, root cause) |
+| **Bug Generator** | Tool for injecting and reverting reproducible defects in the demo product repo |
+| **Bug Template** | A predefined defect with buggy code, fixed code, failing test, and matching ticket definition |
 | **Approval** | Human review of an AI-drafted customer reply before it can be sent |
 | **Confidence Score** | 0–100% rating of how certain an agent is about its output |
+| **Demo Product Repository** | A companion codebase containing the fictional SaaS product with seeded bugs for Devin testing |
 | **Devin Task** | An asynchronous job sent to Cognition AI's Devin for bug reproduction or fixing |
 | **Eval Example** | A golden test case with known-good expected outputs |
 | **Eval Run** | A batch execution of all eval examples to measure agent quality |

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     if (!investigation) {
       return NextResponse.json({ error: "Investigation not found" }, { status: 404 });
     }
-    if (investigation.orgId !== orgId) {
+    if (investigation.orgId && investigation.orgId !== orgId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     if (mode === "fix" && investigation.approvalStatus !== "approved") {
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
 
   const resolvedRepo = repoUrl
     ?? process.env.DEVIN_DEFAULT_REPO
-    ?? "https://github.com/your-org/your-repo";
+    ?? "https://github.com/Trevorton27/support-buddy-demo-product";
 
   const ctx: DevinTaskContext = {
     ticket: {

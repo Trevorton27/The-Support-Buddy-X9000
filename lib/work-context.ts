@@ -39,11 +39,13 @@ export interface WorkContextSummary {
 export async function buildWorkContext(agentId: string, orgId: string): Promise<WorkContextSummary> {
   const terminalStatuses = ["COMPLETED", "CANCELLED"];
 
+  const assigneeFilter = { OR: [{ assigneeId: agentId }, { assigneeId: null }] };
+
   const [activeItems, recentEvents, statusCounts] = await Promise.all([
     prisma.workItem.findMany({
       where: {
-        orgId,
-        assigneeId: agentId,
+        orgId: orgId ? { in: [orgId, ""] } : "",
+        ...assigneeFilter,
         status: { notIn: terminalStatuses },
       },
       orderBy: { priorityScore: "desc" },
@@ -63,7 +65,7 @@ export async function buildWorkContext(agentId: string, orgId: string): Promise<
     }),
     prisma.workItemEvent.findMany({
       where: {
-        workItem: { orgId, assigneeId: agentId },
+        workItem: { orgId: orgId ? { in: [orgId, ""] } : "", ...assigneeFilter },
       },
       orderBy: { createdAt: "desc" },
       take: 10,
@@ -77,8 +79,8 @@ export async function buildWorkContext(agentId: string, orgId: string): Promise<
     prisma.workItem.groupBy({
       by: ["status"],
       where: {
-        orgId,
-        assigneeId: agentId,
+        orgId: orgId ? { in: [orgId, ""] } : "",
+        ...assigneeFilter,
         status: { notIn: terminalStatuses },
       },
       _count: true,

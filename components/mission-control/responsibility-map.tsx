@@ -38,7 +38,7 @@ export function ResponsibilityMap({ counts }: ResponsibilityMapProps) {
           return (
             <div
               key={key}
-              className={`${bg} border ${border} rounded-lg p-3 transition-colors hover:opacity-80 cursor-default`}
+              className={`${bg} border ${border} rounded-lg p-3`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <Icon className={`w-4 h-4 ${color}`} />
