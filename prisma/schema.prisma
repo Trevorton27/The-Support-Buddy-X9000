@@ -327,7 +327,7 @@ model WorkItem {
   id                 String    @id @default(cuid())
   orgId              String
   assigneeId         String?
-  type               String    // CUSTOMER_REPLY | INTERNAL_FOLLOW_UP | INVESTIGATION | ESCALATION | APPROVAL | INCIDENT_UPDATE | SCHEDULED_CHECK | DOCUMENTATION | MANUAL_TASK
+  type               String    // CUSTOMER_REPLY | INTERNAL_FOLLOW_UP | INVESTIGATION | ESCALATION | APPROVAL | INCIDENT_UPDATE | SCHEDULED_CHECK | DOCUMENTATION | MANUAL_TASK | DEVIN_TASK
   status             String    @default("OPEN") // OPEN | IN_PROGRESS | WAITING_CUSTOMER | WAITING_INTERNAL | SNOOZED | COMPLETED | CANCELLED | NEEDS_CLASSIFICATION
   title              String
   summary            String?

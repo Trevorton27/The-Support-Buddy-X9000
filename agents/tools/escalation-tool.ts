@@ -29,7 +29,7 @@ export async function postEscalation(payload: EscalationPayload): Promise<{ url?
 }
 
 async function postGithubIssue(payload: EscalationPayload, token: string) {
-  const repo = process.env.GITHUB_ESCALATION_REPO || "your-org/support-escalations";
+  const repo = process.env.GITHUB_ESCALATION_REPO || "Trevorton27/support-buddy-demo-product";
   const response = await fetch(`https://api.github.com/repos/${repo}/issues`, {
     method: "POST",
     headers: {
