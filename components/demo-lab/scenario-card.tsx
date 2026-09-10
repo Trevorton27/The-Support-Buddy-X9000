@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bug, Check, Loader2, Play, RotateCcw, Ticket, Search,
+  Bug, Loader2, RotateCcw, Ticket, Search,
   GitBranch, ExternalLink, ChevronDown, ChevronUp, Zap, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

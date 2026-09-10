@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Bot, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +37,6 @@ type Step = "service" | "defect" | "difficulty" | "guidance" | "confirm";
 const STEPS: Step[] = ["service", "defect", "difficulty", "guidance", "confirm"];
 
 export function DefectAuthorWizard() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("service");
   const [loading, setLoading] = useState(false);
