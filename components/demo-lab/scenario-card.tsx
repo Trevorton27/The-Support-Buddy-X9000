@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bug, Check, Loader2, Play, RotateCcw, Ticket, Search,
-  GitBranch, ExternalLink, ChevronDown, ChevronUp, Zap,
+  GitBranch, ExternalLink, ChevronDown, ChevronUp, Zap, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +69,7 @@ export function ScenarioCard({ scenario }: { scenario: ScenarioData }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [mutating, setMutating] = useState(false);
 
   const status = statusConfig[scenario.status] ?? statusConfig.available;
   const latestRun = scenario.runs[0] ?? null;
@@ -96,7 +97,34 @@ export function ScenarioCard({ scenario }: { scenario: ScenarioData }) {
   }
 
   const isIdle = scenario.status === "available" || scenario.status === "completed" || scenario.status === "failed";
-  const isBusy = loading !== null;
+  const isBusy = loading !== null || mutating;
+
+  async function handleMutate() {
+    setMutating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/demo-lab/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "mutate",
+          sourceTemplateKey: scenario.key,
+          service: scenario.service,
+          save: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Mutation failed");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Network error");
+    } finally {
+      setMutating(false);
+    }
+  }
 
   return (
     <div className={`border rounded-xl p-5 space-y-4 transition-colors ${status.bg}`}>
@@ -167,6 +195,11 @@ export function ScenarioCard({ scenario }: { scenario: ScenarioData }) {
               className="text-xs border-purple-300 text-purple-700 hover:bg-purple-100 dark:border-purple-700 dark:text-purple-400">
               {loading === "run_full" ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
               Run Entire Demo
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleMutate} disabled={isBusy}
+              className="text-xs border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-400">
+              {mutating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+              Mutate
             </Button>
           </>
         )}

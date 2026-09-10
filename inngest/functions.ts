@@ -14,6 +14,9 @@ import { generateBriefing } from "@/lib/shift-briefing";
 import { getDevinAdapter } from "@/lib/integrations/devin";
 import { mapDevinStatusToInternal } from "@/lib/integrations/devin/types";
 import { parseDevinResult } from "@/lib/integrations/devin/result-parser";
+import { transitionRun } from "@/lib/demo-lab/lifecycle";
+import { injectBug, fixBug } from "@/lib/bug-generator/generator";
+import { processDefectManifest } from "@/lib/demo-lab/defect-author";
 
 const logger = createLogger("inngest-function");
 
@@ -699,30 +702,392 @@ export const pollDevinTaskFunction = inngest.createFunction(
 
       const adapter = getDevinAdapter();
       const session = await adapter.getSession(task.devinSessionId!);
-      const parsed = parseDevinResult(session, task.mode as "reproduce" | "fix");
 
-      await prisma.devinTask.update({
-        where: { id: devinTaskId },
-        data: {
-          verdict: parsed.verdict,
-          verdictReason: parsed.verdictReason,
-          pullRequestUrl: parsed.pullRequestUrl ?? task.pullRequestUrl,
-          structuredResult: JSON.parse(JSON.stringify(parsed)),
-          status: task.status === "working" ? "finished" : task.status,
-        },
-      });
+      if (task.mode === "defect_author") {
+        // For defect_author, store the full structured output without parsing as reproduce/fix
+        await prisma.devinTask.update({
+          where: { id: devinTaskId },
+          data: {
+            verdict: session.structured_output?.verdict as string ?? (session.status_enum === "finished" ? "DEFECT_CREATED" : "DEFECT_FAILED"),
+            verdictReason: session.structured_output?.verdictReason as string ?? "",
+            pullRequestUrl: session.pull_request?.url ?? task.pullRequestUrl,
+            structuredResult: session.structured_output
+              ? JSON.parse(JSON.stringify(session.structured_output))
+              : task.structuredResult,
+            status: task.status === "working" ? "finished" : task.status,
+          },
+        });
+      } else {
+        const parsed = parseDevinResult(session, task.mode as "reproduce" | "fix");
+        await prisma.devinTask.update({
+          where: { id: devinTaskId },
+          data: {
+            verdict: parsed.verdict,
+            verdictReason: parsed.verdictReason,
+            pullRequestUrl: parsed.pullRequestUrl ?? task.pullRequestUrl,
+            structuredResult: JSON.parse(JSON.stringify(parsed)),
+            status: task.status === "working" ? "finished" : task.status,
+          },
+        });
+      }
 
       // Complete WorkItem
       if (task.workItemId) {
         try {
           await transitionWorkItem(
             task.workItemId, "COMPLETED", undefined, "ai",
-            `Devin ${task.mode}: ${parsed.verdict}`
+            `Devin ${task.mode}: ${task.verdict ?? "completed"}`
           );
         } catch { /* may already be completed/cancelled */ }
       }
     });
 
+    // Step 4: For defect_author tasks, create scenario from manifest
+    await step.run("process-defect-manifest", async () => {
+      const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+      if (task.mode !== "defect_author" || task.status !== "finished") return;
+
+      const result = await processDefectManifest(devinTaskId);
+      if (result.scenarioId) {
+        logger.info("Defect manifest processed into scenario", {
+          taskId: devinTaskId,
+          scenarioId: result.scenarioId,
+        });
+      } else {
+        logger.warn("Failed to process defect manifest", {
+          taskId: devinTaskId,
+          error: result.error,
+        });
+      }
+    });
+
     return { devinTaskId };
+  }
+);
+
+// ─── Demo Lab: Full Scenario Orchestration ───
+
+export const runDemoScenarioFunction = inngest.createFunction(
+  {
+    id: "run-demo-scenario",
+    name: "Run Demo Lab Scenario (Full Lifecycle)",
+    retries: 1,
+    timeouts: { finish: "74h" }, // 72h HITL wait + buffer
+  },
+  { event: "demo-lab/run.requested" },
+  async ({ event, step }) => {
+    const { demoRunId, scenarioId, orgId, userId } = event.data as {
+      demoRunId: string;
+      scenarioId: string;
+      orgId: string;
+      userId: string;
+    };
+
+    logger.info("Demo scenario run started", { demoRunId, scenarioId });
+
+    // Step 1: Load scenario and inject defect
+    const scenarioData = await step.run("inject-defect", async () => {
+      const scenario = await prisma.demoIssueScenario.findUniqueOrThrow({
+        where: { id: scenarioId },
+      });
+
+      const ticketTemplate = scenario.ticketTemplate as {
+        title: string;
+        description: string;
+        severity: string;
+        category: string;
+        product: string;
+      };
+
+      const result = injectBug(scenario.key);
+      if (!result.success) {
+        await transitionRun(demoRunId, "failed", result.error ?? "Bug injection failed");
+        return { failed: true as const, scenario, ticketTemplate };
+      }
+
+      await transitionRun(demoRunId, "broken", "Defect injected locally");
+      return { failed: false as const, scenario, ticketTemplate };
+    });
+
+    if (scenarioData.failed) return { demoRunId, status: "failed" };
+
+    // Step 2: Create support ticket
+    const ticketId = await step.run("create-ticket", async () => {
+      const customer = await prisma.customer.findFirst({
+        where: { orgId: { in: [orgId, ""] } },
+      });
+      if (!customer) throw new Error("No customer found. Run npm run seed first.");
+
+      const tmpl = scenarioData.ticketTemplate!;
+      const ticket = await prisma.ticket.create({
+        data: {
+          title: tmpl.title,
+          description: tmpl.description,
+          severity: tmpl.severity,
+          category: tmpl.category,
+          product: tmpl.product,
+          customerId: customer.id,
+          orgId,
+        },
+      });
+
+      await transitionRun(demoRunId, "ticket_open", `Ticket ${ticket.id} created`, {
+        ticketId: ticket.id,
+      });
+
+      return ticket.id;
+    });
+
+    // Step 3: Create and run investigation
+    const investigationId = await step.run("start-investigation", async () => {
+      const investigation = await prisma.investigationRun.create({
+        data: {
+          ticketId,
+          status: "pending",
+          orgId,
+        },
+      });
+
+      await inngest.send({
+        name: "investigation/run.requested",
+        data: { runId: investigation.id, ticketId },
+      });
+
+      await transitionRun(demoRunId, "investigating", `Investigation ${investigation.id} started`, {
+        investigationId: investigation.id,
+      });
+
+      return investigation.id;
+    });
+
+    // Step 4: Wait for investigation to reach awaiting_approval
+    // The investigation function sets status to awaiting_approval when done.
+    // Poll until status changes (max ~10 min for graph execution).
+    const MAX_INVESTIGATION_POLLS = 30;
+    for (let i = 0; i < MAX_INVESTIGATION_POLLS; i++) {
+      await step.sleep(`investigation-poll-wait-${i}`, "20s");
+
+      const investigationDone = await step.run(`investigation-poll-${i}`, async () => {
+        const run = await prisma.investigationRun.findUnique({
+          where: { id: investigationId },
+          select: { status: true },
+        });
+        return run?.status === "awaiting_approval" || run?.status === "complete";
+      });
+
+      if (investigationDone) break;
+    }
+
+    // Sync demo run status to awaiting_approval
+    await step.run("mark-awaiting-approval", async () => {
+      const run = await prisma.investigationRun.findUnique({
+        where: { id: investigationId },
+        select: { status: true },
+      });
+
+      if (run?.status === "awaiting_approval") {
+        await transitionRun(demoRunId, "awaiting_approval", "Investigation complete, awaiting human approval");
+      } else if (run?.status === "complete") {
+        // Already approved (fast path or auto-approved)
+        await transitionRun(demoRunId, "awaiting_approval", "Investigation complete");
+      } else {
+        await transitionRun(demoRunId, "failed", "Investigation did not complete in time");
+      }
+    });
+
+    // Check if we failed
+    const currentStatus = await step.run("check-status-after-investigation", async () => {
+      const run = await prisma.demoRun.findUnique({ where: { id: demoRunId }, select: { status: true } });
+      return run?.status;
+    });
+    if (currentStatus === "failed") return { demoRunId, status: "failed" };
+
+    // Step 5: Wait for HITL approval (the investigation function handles this via its own waitForEvent)
+    // We wait for the investigation to be fully complete (approved/rejected)
+    const MAX_APPROVAL_POLLS = 720; // ~72h at 6min intervals
+    for (let i = 0; i < MAX_APPROVAL_POLLS; i++) {
+      await step.sleep(`approval-poll-wait-${i}`, "6m");
+
+      const approvalDone = await step.run(`approval-poll-${i}`, async () => {
+        const run = await prisma.investigationRun.findUnique({
+          where: { id: investigationId },
+          select: { approvalStatus: true, status: true },
+        });
+        return run?.approvalStatus === "approved" || run?.approvalStatus === "rejected" || run?.approvalStatus === "timeout" || run?.status === "complete";
+      });
+
+      if (approvalDone) break;
+    }
+
+    // Step 6: Dispatch Devin reproduce
+    const reproduceTaskId = await step.run("dispatch-devin-reproduce", async () => {
+      const investigation = await prisma.investigationRun.findUnique({
+        where: { id: investigationId },
+        select: { approvalStatus: true },
+      });
+
+      if (investigation?.approvalStatus !== "approved") {
+        logger.info("Investigation not approved, skipping Devin", {
+          demoRunId,
+          approvalStatus: investigation?.approvalStatus,
+        });
+        return null;
+      }
+
+      const adapter = getDevinAdapter();
+      const scenario = await prisma.demoIssueScenario.findUniqueOrThrow({ where: { id: scenarioId } });
+
+      const reproSteps = scenario.reproductionSteps as string[] | null;
+      const prompt = [
+        `Reproduce the following bug in the support-buddy-demo-product repository.`,
+        `Bug: ${scenario.title}`,
+        `Description: ${scenario.description}`,
+        ...(reproSteps ? [`Steps to reproduce:\n${reproSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`] : []),
+      ].join("\n\n");
+
+      // Find repository
+      const service = await prisma.productService.findUnique({ where: { name: scenario.service } });
+      let repoSlug = `Trevorton27/support-buddy-demo-product`;
+      if (service?.repositoryId) {
+        const repo = await prisma.codeRepository.findUnique({ where: { id: service.repositoryId } });
+        if (repo) repoSlug = `${repo.owner}/${repo.repository}`;
+      }
+
+      const task = await prisma.devinTask.create({
+        data: {
+          investigationRunId: investigationId,
+          mode: "reproduce",
+          status: "pending",
+          repository: repoSlug,
+          promptSnapshot: JSON.parse(JSON.stringify({ prompt })),
+          orgId,
+          createdBy: userId,
+        },
+      });
+
+      await inngest.send({
+        name: "devin/task.created",
+        data: { devinTaskId: task.id },
+      });
+
+      await transitionRun(demoRunId, "devin_reproducing", `Devin reproduce task ${task.id} started`, {
+        devinReproduceId: task.id,
+      });
+
+      return task.id;
+    });
+
+    if (!reproduceTaskId) {
+      // Not approved — skip Devin, mark as completed
+      await step.run("complete-without-devin", async () => {
+        fixBug(scenarioData.scenario.key);
+        await transitionRun(demoRunId, "completed", "Demo completed without Devin (not approved)");
+      });
+      return { demoRunId, status: "completed" };
+    }
+
+    // Step 7: Wait for Devin reproduce to finish
+    const MAX_DEVIN_POLLS = 90; // ~3h at 2min intervals
+    for (let i = 0; i < MAX_DEVIN_POLLS; i++) {
+      await step.sleep(`reproduce-poll-wait-${i}`, "2m");
+
+      const reproduceDone = await step.run(`reproduce-poll-${i}`, async () => {
+        const task = await prisma.devinTask.findUnique({
+          where: { id: reproduceTaskId },
+          select: { status: true },
+        });
+        return ["finished", "failed", "expired", "cancelled"].includes(task?.status ?? "");
+      });
+
+      if (reproduceDone) break;
+    }
+
+    // Step 8: Dispatch Devin fix
+    const fixTaskId = await step.run("dispatch-devin-fix", async () => {
+      const reproduceTask = await prisma.devinTask.findUnique({ where: { id: reproduceTaskId } });
+      if (reproduceTask?.status !== "finished") {
+        logger.info("Devin reproduce did not succeed, skipping fix", { demoRunId, status: reproduceTask?.status });
+        return null;
+      }
+
+      const scenario = await prisma.demoIssueScenario.findUniqueOrThrow({ where: { id: scenarioId } });
+      const acceptance = scenario.acceptanceCriteria as string[] | null;
+
+      const prompt = [
+        `Fix the following bug in the support-buddy-demo-product repository.`,
+        `Bug: ${scenario.title}`,
+        `Description: ${scenario.description}`,
+        ...(acceptance ? [`Acceptance criteria:\n${acceptance.map((a, i) => `${i + 1}. ${a}`).join("\n")}`] : []),
+      ].join("\n\n");
+
+      const task = await prisma.devinTask.create({
+        data: {
+          investigationRunId: investigationId,
+          mode: "fix",
+          status: "pending",
+          repository: reproduceTask.repository,
+          promptSnapshot: JSON.parse(JSON.stringify({ prompt })),
+          orgId,
+          createdBy: userId,
+        },
+      });
+
+      await inngest.send({
+        name: "devin/task.created",
+        data: { devinTaskId: task.id },
+      });
+
+      await transitionRun(demoRunId, "devin_fixing", `Devin fix task ${task.id} started`, {
+        devinFixId: task.id,
+      });
+
+      return task.id;
+    });
+
+    if (!fixTaskId) {
+      await step.run("complete-after-failed-reproduce", async () => {
+        fixBug(scenarioData.scenario.key);
+        await transitionRun(demoRunId, "failed", "Devin reproduce did not succeed");
+      });
+      return { demoRunId, status: "failed" };
+    }
+
+    // Step 9: Wait for Devin fix to finish
+    for (let i = 0; i < MAX_DEVIN_POLLS; i++) {
+      await step.sleep(`fix-poll-wait-${i}`, "2m");
+
+      const fixDone = await step.run(`fix-poll-${i}`, async () => {
+        const task = await prisma.devinTask.findUnique({
+          where: { id: fixTaskId },
+          select: { status: true },
+        });
+        return ["finished", "failed", "expired", "cancelled"].includes(task?.status ?? "");
+      });
+
+      if (fixDone) break;
+    }
+
+    // Step 10: Finalize
+    await step.run("finalize-demo", async () => {
+      const fixTask = await prisma.devinTask.findUnique({ where: { id: fixTaskId } });
+
+      if (fixTask?.status === "finished") {
+        if (fixTask.pullRequestUrl) {
+          await transitionRun(demoRunId, "pr_ready", `PR ready: ${fixTask.pullRequestUrl}`, {
+            pullRequestUrl: fixTask.pullRequestUrl,
+          });
+        }
+        // Revert local bug since Devin's fix is on a PR branch
+        fixBug(scenarioData.scenario.key);
+        await transitionRun(demoRunId, "fixed", "Devin fix completed");
+        await transitionRun(demoRunId, "completed", "Full demo cycle complete");
+      } else {
+        fixBug(scenarioData.scenario.key);
+        await transitionRun(demoRunId, "failed", `Devin fix ended with status: ${fixTask?.status}`);
+      }
+    });
+
+    logger.info("Demo scenario run complete", { demoRunId });
+    return { demoRunId, status: "completed" };
   }
 );

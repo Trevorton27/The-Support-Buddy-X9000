@@ -23,6 +23,9 @@ const envSchema = z.object({
   // Devin AI: automated bug reproduction and code fixes
   DEVIN_API_KEY: z.string().optional(),
   DEVIN_DEFAULT_REPO: z.string().optional(),
+  // Webhook secrets for signature verification
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  DEVIN_WEBHOOK_SECRET: z.string().optional(),
 });
 
 function parseEnv() {

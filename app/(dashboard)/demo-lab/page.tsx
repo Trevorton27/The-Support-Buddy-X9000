@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScenarioCard } from "@/components/demo-lab/scenario-card";
 import type { ScenarioData } from "@/components/demo-lab/scenario-card";
+import { GenerateScenarioDialog } from "@/components/demo-lab/generate-scenario-dialog";
+import { DefectAuthorWizard } from "@/components/demo-lab/defect-author-wizard";
 
 export default async function DemoLabPage() {
   const { userId, orgId } = await auth();
@@ -72,7 +74,7 @@ export default async function DemoLabPage() {
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Stats + Generate */}
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between">
@@ -90,9 +92,13 @@ export default async function DemoLabPage() {
                 <p className="text-xs text-slate-500 dark:text-slate-400">Total Runs</p>
               </div>
             </div>
-            <Badge variant="outline" className="text-xs">
-              Demo Product: Trevorton27/support-buddy-demo-product
-            </Badge>
+            <div className="flex items-center gap-3">
+              <GenerateScenarioDialog />
+              <DefectAuthorWizard />
+              <Badge variant="outline" className="text-xs">
+                Demo Product: Trevorton27/support-buddy-demo-product
+              </Badge>
+            </div>
           </div>
         </CardContent>
       </Card>

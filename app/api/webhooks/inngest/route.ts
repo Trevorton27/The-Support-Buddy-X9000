@@ -11,6 +11,7 @@ import {
   generateShiftBriefingFunction,
   detectStaleResponsibilitiesFunction,
   pollDevinTaskFunction,
+  runDemoScenarioFunction,
 } from "@/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -26,5 +27,6 @@ export const { GET, POST, PUT } = serve({
     generateShiftBriefingFunction,
     detectStaleResponsibilitiesFunction,
     pollDevinTaskFunction,
+    runDemoScenarioFunction,
   ],
 });
