@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 interface ReproduceButtonProps {
   ticketId: string;
   investigationRunId: string;
-  repoUrl?: string;
   disabled?: boolean;
   hasActiveTask?: boolean;
 }
@@ -15,7 +14,6 @@ interface ReproduceButtonProps {
 export function ReproduceButton({
   ticketId,
   investigationRunId,
-  repoUrl,
   disabled,
   hasActiveTask,
 }: ReproduceButtonProps) {
@@ -31,7 +29,7 @@ export function ReproduceButton({
       const res = await fetch("/api/devin/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "reproduce", ticketId, investigationRunId, repoUrl }),
+        body: JSON.stringify({ mode: "reproduce", ticketId, investigationRunId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -63,7 +61,7 @@ export function ReproduceButton({
         <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">Confirm: Reproduce with Devin</h4>
         <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
           <li><strong>Mode:</strong> Reproduction only (read-only)</li>
-          <li><strong>Repository:</strong> {repoUrl ?? process.env.NEXT_PUBLIC_DEVIN_DEFAULT_REPO ?? "Default"}</li>
+          <li><strong>Repository:</strong> Resolved from service mapping</li>
           <li><strong>Code changes:</strong> Not allowed</li>
           <li><strong>PR creation:</strong> Not allowed</li>
         </ul>

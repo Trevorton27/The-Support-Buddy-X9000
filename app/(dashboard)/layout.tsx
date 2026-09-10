@@ -17,6 +17,7 @@ const navItems = [
   { href: "/training", label: "Training", icon: GraduationCap },
   { href: "/eval", label: "Eval", icon: FlaskConical },
   { href: "/team", label: "Team", icon: Users },
+  { href: "/demo-lab", label: "Demo Lab", icon: FlaskConical },
   { href: "/bug-generator", label: "Bug Generator", icon: Bug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

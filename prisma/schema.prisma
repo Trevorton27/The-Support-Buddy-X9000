@@ -468,6 +468,104 @@ model DevinTask {
   @@index([workItemId])
 }
 
+// Demo Lab: Reusable issue scenarios for Devin testing
+model DemoIssueScenario {
+  id                 String   @id @default(cuid())
+  key                String   @unique // e.g. "auth-cert-region-mismatch"
+  title              String
+  description        String
+  repository         String   // GitHub repo URL
+  service            String   // e.g. "auth-service"
+  affectedPaths      Json     // string[] — files modified by the defect
+  baseBranch         String   @default("main")
+
+  ticketTemplate     Json     // { title, description, severity, category, product }
+  evidenceTemplate   Json     // { deployment, logs, traces }
+  acceptanceCriteria Json     // string[] — what Devin must achieve
+  reproductionSteps  Json     // string[] — how to reproduce the bug
+
+  defectPatch        Json?    // { buggyCode, fixedCode, filePath, testFilePath, testCode }
+  brokenCommitSha    String?
+  fixedCommitSha     String?
+
+  status             String   @default("available") // available | activating | broken | fixing | fixed | resetting | failed
+  activeTicketId     String?
+  activeDevinTaskId  String?
+  activeBranch       String?
+  generation         Int      @default(0)
+
+  severity           String   @default("high")   // critical | high | medium | low
+  difficulty         String   @default("medium") // easy | medium | hard
+  category           String   @default("configuration") // authentication | data | integration | performance | configuration
+
+  orgId              String   @default("")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  runs DemoRun[]
+
+  @@index([orgId])
+  @@index([status])
+}
+
+// Demo Lab: Individual demo run — one per activation of a scenario
+model DemoRun {
+  id                String    @id @default(cuid())
+  scenarioId        String
+  generation        Int
+  status            String    @default("pending") // pending | activating | broken | ticket_open | investigating | awaiting_approval | devin_reproducing | devin_fixing | pr_ready | fixed | resetting | failed | completed
+  branch            String?
+  brokenCommitSha   String?
+  fixedCommitSha    String?
+  resetCommitSha    String?
+  ticketId          String?
+  investigationId   String?
+  devinReproduceId  String?
+  devinFixId        String?
+  pullRequestUrl    String?
+  errorMessage      String?
+  timeline          Json?     // { timestamp, event, detail }[]
+  createdBy         String    // Clerk userId
+  orgId             String    @default("")
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+
+  scenario DemoIssueScenario @relation(fields: [scenarioId], references: [id])
+
+  @@index([scenarioId])
+  @@index([orgId])
+  @@index([status])
+}
+
+// Demo Lab: Trusted code repositories
+model CodeRepository {
+  id              String  @id @default(cuid())
+  orgId           String  @default("")
+  name            String  // display name
+  owner           String  // GitHub owner/org
+  repository      String  // "owner/repo"
+  defaultBranch   String  @default("main")
+  githubInstallId String?
+  allowedForDevin Boolean @default(false)
+
+  services ProductService[]
+
+  @@unique([orgId, repository])
+  @@index([orgId])
+}
+
+// Demo Lab: Service-to-repository mapping
+model ProductService {
+  id           String  @id @default(cuid())
+  name         String  @unique // e.g. "auth-service"
+  repositoryId String
+  workingDir   String? // e.g. "services/auth-service"
+  pathPatterns Json    // string[] — glob patterns for this service
+  testCommand  String? // e.g. "npm run test:auth"
+
+  repository CodeRepository @relation(fields: [repositoryId], references: [id])
+}
+
 // Mission Control: Ticket Messages — conversation on tickets
 model TicketMessage {
   id         String   @id @default(cuid())

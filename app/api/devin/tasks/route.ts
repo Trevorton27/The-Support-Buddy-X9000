@@ -13,7 +13,7 @@ const createTaskSchema = z.object({
   mode: z.enum(["reproduce", "fix"]),
   ticketId: z.string().optional(),
   investigationRunId: z.string().optional(),
-  repoUrl: z.string().optional(),
+  repositoryId: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { mode, ticketId, investigationRunId, repoUrl } = parsed.data;
+  const { mode, ticketId, investigationRunId, repositoryId } = parsed.data;
 
   if (!ticketId && !investigationRunId) {
     return NextResponse.json({ error: "At least one of ticketId or investigationRunId is required" }, { status: 400 });
@@ -98,9 +98,27 @@ export async function POST(request: Request) {
   const deployStep = investigation?.steps.find((s) => s.agentName === "deployment_correlation");
   const intakeStep = investigation?.steps.find((s) => s.agentName === "intake");
 
-  const resolvedRepo = repoUrl
-    ?? process.env.DEVIN_DEFAULT_REPO
-    ?? "https://github.com/Trevorton27/support-buddy-demo-product";
+  // Resolve repository from server-side records, not browser input
+  let resolvedRepo: string;
+  if (repositoryId) {
+    const codeRepo = await prisma.codeRepository.findUnique({ where: { id: repositoryId } });
+    if (!codeRepo || !codeRepo.allowedForDevin) {
+      return NextResponse.json({ error: "Repository not found or not allowed for Devin" }, { status: 400 });
+    }
+    resolvedRepo = `https://github.com/${codeRepo.repository}`;
+  } else {
+    // Fall back to product service mapping or default
+    const productService = ticket.product
+      ? await prisma.productService.findUnique({
+          where: { name: ticket.product },
+          include: { repository: true },
+        })
+      : null;
+    resolvedRepo = productService?.repository
+      ? `https://github.com/${productService.repository.repository}`
+      : process.env.DEVIN_DEFAULT_REPO
+        ?? "https://github.com/Trevorton27/support-buddy-demo-product";
+  }
 
   const ctx: DevinTaskContext = {
     ticket: {

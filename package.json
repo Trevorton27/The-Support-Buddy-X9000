@@ -9,6 +9,7 @@
     "lint": "next lint",
     "seed": "dotenv -e .env.local -- tsx scripts/seed-db.ts",
     "seed:work-items": "dotenv -e .env.local -- tsx scripts/seed-work-items.ts",
+    "seed:scenarios": "dotenv -e .env.local -- tsx scripts/seed-scenarios.ts",
     "ingest": "dotenv -e .env.local -- tsx scripts/ingest-docs.ts",
     "reset": "dotenv -e .env.local -- tsx scripts/reset-demo.ts",
     "knowledge:fetch": "tsx scripts/knowledge-fetch-docs.ts",

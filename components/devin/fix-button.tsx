@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 interface FixButtonProps {
   investigationRunId: string;
   ticketId: string;
-  repoUrl?: string;
   disabled?: boolean;
   hasActiveTask?: boolean;
 }
@@ -15,7 +14,6 @@ interface FixButtonProps {
 export function FixButton({
   investigationRunId,
   ticketId,
-  repoUrl,
   disabled,
   hasActiveTask,
 }: FixButtonProps) {
@@ -31,7 +29,7 @@ export function FixButton({
       const res = await fetch("/api/devin/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "fix", ticketId, investigationRunId, repoUrl }),
+        body: JSON.stringify({ mode: "fix", ticketId, investigationRunId }),
       });
       const data = await res.json();
       if (!res.ok) {

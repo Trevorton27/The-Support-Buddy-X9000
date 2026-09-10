@@ -36,7 +36,7 @@ describe("ReproduceButton", () => {
       json: () => Promise.resolve({ id: "task-1", workItemId: "wi-1", status: "queued" }),
     });
 
-    render(<ReproduceButton ticketId="t1" investigationRunId="r1" repoUrl="https://github.com/test/repo" />);
+    render(<ReproduceButton ticketId="t1" investigationRunId="r1" />);
     fireEvent.click(screen.getByText("Reproduce with Devin"));
     fireEvent.click(screen.getByText("Confirm"));
 
@@ -47,7 +47,6 @@ describe("ReproduceButton", () => {
           mode: "reproduce",
           ticketId: "t1",
           investigationRunId: "r1",
-          repoUrl: "https://github.com/test/repo",
         }),
       }));
     });
