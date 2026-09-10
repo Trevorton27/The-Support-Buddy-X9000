@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Ticket, Search, Settings, ClipboardCheck,
   AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2,
-  GraduationCap, Target, Bug, type LucideIcon,
+  GraduationCap, Target, Bug, Bot, type LucideIcon,
 } from "lucide-react";
 
 // ─── Nav Configuration ───
@@ -70,6 +70,13 @@ const navItems: NavItem[] = [
     label: "Knowledge Base",
     icon: BookOpen,
     preview: "RAG-indexed documentation that agents use for evidence-based responses",
+    group: "operations",
+  },
+  {
+    href: "/devin",
+    label: "Devin AI",
+    icon: Bot,
+    preview: "Monitor Devin AI sessions — reproductions, fixes, and authored defects with live status tracking",
     group: "operations",
   },
   {
