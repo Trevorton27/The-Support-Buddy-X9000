@@ -49,5 +49,8 @@ Thumbs.db
 knowledge/external-docs/**/*.md
 knowledge/external-docs/.fetch-cache.json
 
+# GitHub App private keys
+*.private-key.pem
+
 # clerk configuration (can include secrets)
 /.clerk/
