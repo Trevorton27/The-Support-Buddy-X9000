@@ -114,6 +114,12 @@ export async function POST(
           },
         });
 
+        // Fire ticket/created for clustering + GitHub sync
+        await inngest.send({
+          name: "ticket/created",
+          data: { ticketId: ticket.id },
+        });
+
         await transitionRun(activeRun.id, "ticket_open", `Ticket ${ticket.id} created`, { ticketId: ticket.id });
         return NextResponse.json({ runId: activeRun.id, ticketId: ticket.id, status: "ticket_open" });
       }

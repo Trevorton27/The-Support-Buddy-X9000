@@ -3,6 +3,7 @@ import { inngest } from "@/inngest/client";
 import {
   runInvestigationFunction,
   clusterTicketsFunction,
+  syncTicketToGitHubFunction,
   batchGenerateTicketsFunction,
   processWorkSignalFunction,
   recalculatePrioritiesFunction,
@@ -19,6 +20,7 @@ export const { GET, POST, PUT } = serve({
   functions: [
     runInvestigationFunction,
     clusterTicketsFunction,
+    syncTicketToGitHubFunction,
     batchGenerateTicketsFunction,
     processWorkSignalFunction,
     recalculatePrioritiesFunction,

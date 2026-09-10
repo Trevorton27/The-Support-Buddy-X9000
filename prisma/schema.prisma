@@ -43,6 +43,8 @@ model Ticket {
   updatedAt     DateTime @updatedAt
 
   assigneeId    String?
+  githubIssueUrl    String?
+  githubIssueNumber Int?
 
   customer       Customer          @relation(fields: [customerId], references: [id])
   investigations InvestigationRun[]

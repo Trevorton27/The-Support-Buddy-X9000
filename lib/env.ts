@@ -23,6 +23,10 @@ const envSchema = z.object({
   // Devin AI: automated bug reproduction and code fixes
   DEVIN_API_KEY: z.string().optional(),
   DEVIN_DEFAULT_REPO: z.string().optional(),
+  // GitHub App for demo repo issue sync
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+  GITHUB_APP_INSTALLATION_ID: z.string().optional(),
   // Webhook secrets for signature verification
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   DEVIN_WEBHOOK_SECRET: z.string().optional(),

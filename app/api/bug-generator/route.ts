@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { inngest } from "@/inngest/client";
 import { z } from "zod";
 import {
   listTemplates,
@@ -85,6 +86,12 @@ export async function POST(request: NextRequest) {
           },
         });
         result.ticketId = ticket.id;
+
+        // Fire ticket/created for clustering + GitHub sync
+        await inngest.send({
+          name: "ticket/created",
+          data: { ticketId: ticket.id },
+        });
       }
     }
   }

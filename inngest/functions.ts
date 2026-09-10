@@ -17,6 +17,7 @@ import { parseDevinResult } from "@/lib/integrations/devin/result-parser";
 import { transitionRun } from "@/lib/demo-lab/lifecycle";
 import { injectBug, fixBug } from "@/lib/bug-generator/generator";
 import { processDefectManifest } from "@/lib/demo-lab/defect-author";
+import { syncTicketToGitHub } from "@/lib/github-sync";
 
 const logger = createLogger("inngest-function");
 
@@ -252,6 +253,30 @@ export const clusterTicketsFunction = inngest.createFunction(
     }
 
     return { clustersFound: clusters.length };
+  }
+);
+
+// GitHub Issue Sync — create corresponding issue on demo product repo
+export const syncTicketToGitHubFunction = inngest.createFunction(
+  {
+    id: "sync-ticket-to-github",
+    name: "Sync Ticket to GitHub Issue",
+    retries: 2,
+    timeouts: { finish: "2m" },
+  },
+  { event: "ticket/created" },
+  async ({ event, step }) => {
+    const { ticketId } = event.data as { ticketId: string };
+
+    const result = await step.run("create-github-issue", async () => {
+      return syncTicketToGitHub(ticketId);
+    });
+
+    if (result) {
+      logger.info("Ticket synced to GitHub", { ticketId, issueUrl: result.issueUrl });
+    }
+
+    return { ticketId, synced: !!result, issueUrl: result?.issueUrl ?? null };
   }
 );
 
