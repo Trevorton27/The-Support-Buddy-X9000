@@ -50,7 +50,6 @@ export function PriorityQueue({ items: initialItems }: PriorityQueueProps) {
   });
 
   // Group items by ticketId so related work (investigation + Devin task) appear together
-  const grouped: { ticketId: string | null; items: WorkItemData[] }[] = [];
   const ticketGroups = new Map<string, WorkItemData[]>();
   const ungrouped: WorkItemData[] = [];
 
