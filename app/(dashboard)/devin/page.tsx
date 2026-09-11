@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Bot } from "lucide-react";
 import { DevinDashboard, type DevinTaskRow, type DevinStats } from "@/components/devin/devin-dashboard";

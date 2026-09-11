@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
-import { auth } from "@clerk/nextjs/server";
+import { requireAuth, auth } from "@/lib/auth";
 
 interface DifficultyStats {
   difficulty: string;

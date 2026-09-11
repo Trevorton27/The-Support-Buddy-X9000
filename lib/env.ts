@@ -3,8 +3,8 @@ import { z } from "zod";
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
+  BETTER_AUTH_SECRET: z.string().min(1),
+  BETTER_AUTH_URL: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().default("local"),
   INNGEST_SIGNING_KEY: z.string().optional(),
   // Optional integrations (already existing)

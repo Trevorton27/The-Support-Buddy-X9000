@@ -12,7 +12,7 @@ const stack = [
   { name: "pgvector", role: "Cosine similarity RAG search over embedded knowledge base" },
   { name: "HuggingFace", role: "Cross-encoder reranker — re-scores RAG candidates before LLM sees them" },
   { name: "Prisma 6", role: "Type-safe ORM with JSON columns, raw vector queries, and org-scoped access" },
-  { name: "Clerk", role: "Auth with Organizations — org-scoped data isolation across all models" },
+  { name: "Better Auth", role: "Self-hosted auth with Organizations — org-scoped data isolation across all models" },
 ];
 
 const highlights = [
@@ -44,7 +44,7 @@ const highlights = [
   {
     icon: Users,
     title: "Org-scoped multi-tenancy",
-    body: "Clerk Organizations provide the tenancy boundary. orgId is stored on Customer, Ticket, and InvestigationRun — with DB indexes. requireOrgAuth() in lib/auth.ts extracts userId + orgId + orgRole from the Clerk session and is called by every org-scoped route handler. The sidebar includes an OrganizationSwitcher so users can move between orgs without re-authenticating.",
+    body: "Better Auth Organizations provide the tenancy boundary. orgId is stored on Customer, Ticket, and InvestigationRun — with DB indexes. requireOrgAuth() in lib/auth.ts extracts userId + orgId + orgRole from the session and is called by every org-scoped route handler. The sidebar includes an OrgSwitcher so users can move between orgs without re-authenticating.",
   },
 ];
 

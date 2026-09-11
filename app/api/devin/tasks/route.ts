@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     if (!investigationRunId) {
       return NextResponse.json({ error: "investigationRunId is required for fix mode" }, { status: 400 });
     }
-    if (orgRole !== "org:admin") {
+    if (orgRole !== "owner" && orgRole !== "admin") {
       return NextResponse.json({ error: "Fix mode requires admin role" }, { status: 403 });
     }
   }

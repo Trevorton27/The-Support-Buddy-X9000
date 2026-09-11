@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 
 // POST /api/knowledge/ingest
 // Admin-only: triggers re-ingestion of the knowledge base.
 // In production this should be invoked as an Inngest function for long-running work;
 // here it shells out to the ingest script via a child process for simplicity.
 //
-// Authorization: must be org admin (orgRole === "org:admin")
+// Authorization: must be org admin (orgRole === "owner" or "admin")
 export async function POST() {
   const { userId, orgRole } = await auth();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (orgRole !== "org:admin") {
+  if (orgRole !== "owner" && orgRole !== "admin") {
     return NextResponse.json({ error: "Forbidden — org admin required" }, { status: 403 });
   }
 

@@ -4,7 +4,7 @@
 
 - **TypeScript strict mode** — no implicit `any`, no type casting with `as` unless bridging LangGraph/Prisma boundaries (see Known Pitfalls)
 - **Never import `prisma` in Client Components** — all DB access must be in Server Components, Route Handlers, or `agents/`
-- **Never expose `OPENAI_API_KEY` or `CLERK_SECRET_KEY` to the client** — use `lib/env.ts` server-side only
+- **Never expose `OPENAI_API_KEY` or `BETTER_AUTH_SECRET` to the client** — use `lib/env.ts` server-side only
 - **App Router only** — no `pages/` directory; all routes live under `app/`
 - **Agents are server-only** — nothing in `agents/` should ever be imported by a Client Component
 
@@ -15,7 +15,7 @@
 | Layer | Technology |
 |---|---|
 | Framework | Next.js 15 (App Router, React 19) |
-| Auth | Clerk (`@clerk/nextjs` v6) with Organizations |
+| Auth | Better Auth (self-hosted, `better-auth`) with Organizations plugin |
 | Database | PostgreSQL + pgvector via Prisma 6 |
 | Background jobs | Inngest v3 |
 | Agent orchestration | LangGraph.js (`@langchain/langgraph`) |
@@ -92,10 +92,11 @@ app/
     approvals/          # Phase 3 — HITL approval queue + [runId] review page
     incidents/          # Phase 6 — incident list + [id] detail
     eval/               # Phase 7 — eval run history + [runId] + examples/
-    team/               # Phase 8 — org member list (via Clerk API)
+    team/               # Phase 8 — org member list (via Better Auth API)
     settings/           # Model info + integration cards + demo reset
-    layout.tsx          # Sidebar with nav + OrganizationSwitcher + pending approvals badge
+    layout.tsx          # Sidebar with nav + OrgSwitcher + UserMenu + pending approvals badge
   api/
+    auth/[...all]/      # Better Auth catch-all handler (GET/POST)
     agents/run/         # POST — triggers investigation via Inngest
     tickets/            # REST CRUD + fires "ticket/created" Inngest event
     investigations/
@@ -118,6 +119,11 @@ app/
     webhooks/inngest/   # Inngest receiver (GET/POST/PUT) — must remain public
 
 components/
+  auth/
+    sign-in-form.tsx        # "use client" email+password sign-in
+    sign-up-form.tsx        # "use client" email+password sign-up
+    user-menu.tsx           # "use client" dropdown with avatar + sign-out
+    org-switcher.tsx        # "use client" org list + create + switch
   agents/
     agent-timeline.tsx      # Live pipeline with clickable steps
     step-detail-drawer.tsx  # Slide-over drawer (Tailwind, no Radix)
@@ -149,7 +155,9 @@ components/
 
 lib/
   db.ts               # Prisma singleton (hot-reload safe)
-  auth.ts             # requireAuth() + requireOrgAuth() → { userId, orgId, orgRole }
+  better-auth.ts      # Better Auth instance (prismaAdapter, organization plugin, nextCookies)
+  auth.ts             # auth(), getSession(), requireAuth(), requireOrgAuth() — drop-in Clerk replacement
+  auth-client.ts      # Client-side auth (createAuthClient, signIn, signUp, signOut, useSession)
   embeddings.ts       # embedText() wrapping text-embedding-3-small
   env.ts              # Zod-validated env (server-only)
   vector-search.ts    # searchKnowledge() pgvector raw query
@@ -191,6 +199,14 @@ knowledge-base/       # Markdown docs embedded into pgvector
 ## Prisma Models
 
 ```
+User              — Better Auth user (id, name, email, image)
+Session           — Better Auth session (token, expiresAt, activeOrganizationId)
+Account           — Better Auth account (provider credentials)
+Verification      — Better Auth email verification tokens
+Organization      — Better Auth org (name, slug)
+Member            — Better Auth org membership (userId, organizationId, role)
+Invitation        — Better Auth org invitations
+
 Customer          — tenant customer records
 Ticket            — support tickets; has assigneeId, messages TicketMessage[], workItems WorkItem[]
 InvestigationRun  — one per investigation; has approvalStatus, guardrailsResult,
@@ -220,7 +236,7 @@ TicketMessage     — conversation messages on tickets; authorType (customer|age
 ### Server vs. Client Components
 
 - Default to **Server Components** — add `"use client"` only for interactivity
-- Client Components: `InvestigationPanel`, `AgentTimeline`, `AgentOutputCard`, `TicketList`, `StatusPageEditor`, `IntegrationCard`, `DemoReset`, `ReplyEditor`, `StepDetailDrawer`, `PriorityQueue`, `WorkItemCard`, `WorkItemActions`, `ShiftBriefing`, `ResponsibilityMap`, `WorkAssistant`, `NeedsClassificationQueue`
+- Client Components: `InvestigationPanel`, `AgentTimeline`, `AgentOutputCard`, `TicketList`, `StatusPageEditor`, `IntegrationCard`, `DemoReset`, `ReplyEditor`, `StepDetailDrawer`, `PriorityQueue`, `WorkItemCard`, `WorkItemActions`, `ShiftBriefing`, `ResponsibilityMap`, `WorkAssistant`, `NeedsClassificationQueue`, `SignInForm`, `SignUpForm`, `UserMenu`, `OrgSwitcher`
 - `settings/page.tsx` is a **Server Component** — it reads `process.env` to determine live/mock status and passes `isLive` down to `IntegrationCard`
 - **Never** call `prisma` or `lib/env.ts` from a Client Component
 - **Never** import anything from `agents/` in a Client Component
@@ -298,14 +314,21 @@ The `step.waitForEvent()` in Inngest waits up to 72h for `POST /api/investigatio
 
 ---
 
-## Authentication (Clerk)
+## Authentication (Better Auth)
 
-- All routes except `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks/(.*)` protected by `middleware.ts`
-- In Server Components/Route Handlers: `const { userId } = await auth()`
+- Self-hosted auth via `better-auth` — all auth data stored in Postgres (User, Session, Account, Organization, Member models)
+- Auth instance: `lib/better-auth.ts` — betterAuth() with prismaAdapter, emailAndPassword, organization plugin, nextCookies
+- Client: `lib/auth-client.ts` — createAuthClient() with organizationClient plugin (client-side only)
+- API handler: `app/api/auth/[...all]/route.ts` — handles all auth endpoints
+- All routes except `/`, `/sign-in`, `/sign-up`, `/api/auth/*`, `/api/webhooks/*` protected by `middleware.ts` (cookie check)
+- In Server Components/Route Handlers: `const { userId, orgId, orgRole } = await auth()` from `@/lib/auth`
 - `lib/auth.ts` exports:
-  - `requireAuth()` → `{ userId }` or throws 401
-  - `requireOrgAuth()` → `{ userId, orgId, orgRole }` or throws 401
-- To fetch org members in a Server Component: `const client = await clerkClient(); client.organizations.getOrganizationMembershipList({ organizationId: orgId })`
+  - `auth()` → `{ userId, orgId, orgRole }` (drop-in replacement for old Clerk auth)
+  - `getSession()` → full Better Auth session object
+  - `requireAuth()` → `{ userId, response }` — returns 401 response if not authenticated
+  - `requireOrgAuth()` → `{ userId, orgId, orgRole, response }` — returns 401 response if not authenticated
+- To fetch org members: use `auth.api.getFullOrganization({ headers, query: { organizationId } })` from `lib/better-auth.ts`
+- Role names: `owner`, `admin`, `member` (not `org:admin`, `org:analyst`, `org:viewer`)
 - The Inngest webhook route must remain public
 
 ---
@@ -327,8 +350,7 @@ Required:
 ```
 DATABASE_URL                       # postgres://...
 OPENAI_API_KEY                     # LLM calls + embeddings
-CLERK_SECRET_KEY                   # server-side Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY  # client-side Clerk
+BETTER_AUTH_SECRET                 # session signing secret (self-hosted auth)
 ```
 
 Optional — live vs. mock:

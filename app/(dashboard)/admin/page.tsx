@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { SystemHealth } from "@/components/admin/system-health";
@@ -69,7 +69,7 @@ async function getAdminData() {
 export default async function AdminPage() {
   const { userId, orgRole } = await auth();
   if (!userId) redirect("/sign-in");
-  if (orgRole !== "org:admin") redirect("/dashboard");
+  if (orgRole !== "owner" && orgRole !== "admin") redirect("/dashboard");
 
   const isHfLive = !!process.env.HUGGING_FACE_API_KEY;
 

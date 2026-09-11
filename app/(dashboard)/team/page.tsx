@@ -1,5 +1,7 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { auth as betterAuth } from "@/lib/better-auth";
+import { headers } from "next/headers";
 import { MemberList } from "@/components/team/member-list";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users } from "lucide-react";
@@ -20,21 +22,23 @@ export default async function TeamPage() {
 
   if (orgId) {
     try {
-      const client = await clerkClient();
-      const membershipList = await client.organizations.getOrganizationMembershipList({
-        organizationId: orgId,
+      const org = await betterAuth.api.getFullOrganization({
+        headers: await headers(),
+        query: { organizationId: orgId },
       });
-      members = membershipList.data.map((m) => ({
-        id: m.id,
-        identifier: m.publicUserData?.identifier ?? "",
-        firstName: m.publicUserData?.firstName ?? null,
-        lastName: m.publicUserData?.lastName ?? null,
-        imageUrl: m.publicUserData?.imageUrl ?? "",
-        role: m.role,
-        createdAt: m.createdAt,
-      }));
+      if (org?.members) {
+        members = org.members.map((m) => ({
+          id: m.id,
+          identifier: m.user.email,
+          firstName: m.user.name?.split(" ")[0] ?? null,
+          lastName: m.user.name?.split(" ").slice(1).join(" ") || null,
+          imageUrl: m.user.image ?? "",
+          role: m.role,
+          createdAt: new Date(m.createdAt).getTime(),
+        }));
+      }
     } catch {
-      // Clerk API error — show empty list
+      // org fetch failed — show empty list
     }
   }
 
@@ -70,7 +74,7 @@ export default async function TeamPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Members ({members.length})</CardTitle>
               <CardDescription>
-                Members are managed through Clerk. Roles control data access and actions.
+                Members are managed through your organization settings. Roles control data access and actions.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -86,22 +90,22 @@ export default async function TeamPage() {
               <div className="space-y-3 text-sm">
                 {[
                   {
-                    role: "org:admin",
+                    role: "owner",
+                    label: "Owner",
+                    color: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+                    perms: ["View all data", "Run investigations", "Approve/reject drafts", "Manage integrations", "Invite members"],
+                  },
+                  {
+                    role: "admin",
                     label: "Admin",
                     color: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
                     perms: ["View all data", "Run investigations", "Approve/reject drafts", "Manage integrations", "Invite members"],
                   },
                   {
-                    role: "org:analyst",
-                    label: "Analyst",
+                    role: "member",
+                    label: "Member",
                     color: "bg-blue-50 text-blue-700 border-blue-200",
                     perms: ["View all data", "Run investigations", "Approve/reject drafts"],
-                  },
-                  {
-                    role: "org:viewer",
-                    label: "Viewer",
-                    color: "bg-slate-100 text-slate-600 border-slate-200",
-                    perms: ["View all data"],
                   },
                 ].map(({ role, label, color, perms }) => (
                   <div key={role} className="flex items-start gap-3">

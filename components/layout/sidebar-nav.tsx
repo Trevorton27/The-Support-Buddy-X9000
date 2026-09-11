@@ -90,7 +90,7 @@ const navItems: NavItem[] = [
     href: "/team",
     label: "Team Members",
     icon: Users,
-    preview: "Organization members, roles, and permissions managed via Clerk",
+    preview: "Organization members, roles, and permissions",
     group: "operations",
   },
 

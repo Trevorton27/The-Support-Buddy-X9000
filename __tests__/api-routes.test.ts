@@ -1,7 +1,7 @@
 /**
  * API route unit tests — import handlers directly, no HTTP server required.
  *
- * Mocks: @/lib/db, @/lib/auth, @/inngest/client, @clerk/nextjs/server,
+ * Mocks: @/lib/db, @/lib/auth, @/inngest/client,
  *        @/lib/generation/ticket-generator, @/lib/generation/training-scorer
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -26,14 +26,11 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/auth", () => ({
   requireAuth: vi.fn(),
   requireOrgAuth: vi.fn(),
+  auth: vi.fn(),
 }));
 
 vi.mock("@/inngest/client", () => ({
   inngest: { send: vi.fn().mockResolvedValue(undefined) },
-}));
-
-vi.mock("@clerk/nextjs/server", () => ({
-  auth: vi.fn(),
 }));
 
 vi.mock("@/lib/generation/ticket-generator", () => ({
@@ -53,8 +50,7 @@ vi.mock("@/lib/generation/dataset-exporter", () => ({
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/db";
-import { requireAuth, requireOrgAuth } from "@/lib/auth";
-import { auth as clerkAuth } from "@clerk/nextjs/server";
+import { requireAuth, requireOrgAuth, auth as appAuth } from "@/lib/auth";
 import { generateTicketBatch } from "@/lib/generation/ticket-generator";
 import { scoreTrainingRun } from "@/lib/generation/training-scorer";
 
@@ -68,8 +64,7 @@ import { GET as getLeaderboard } from "@/app/api/training/leaderboard/route";
 
 const mockRequireOrgAuth = requireOrgAuth as ReturnType<typeof vi.fn>;
 const mockRequireAuth = requireAuth as ReturnType<typeof vi.fn>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockAuth = clerkAuth as unknown as ReturnType<typeof vi.fn>;
+const mockAuth = appAuth as unknown as ReturnType<typeof vi.fn>;
 const mockGenerateBatch = generateTicketBatch as ReturnType<typeof vi.fn>;
 const mockScoreRun = scoreTrainingRun as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as typeof prisma;

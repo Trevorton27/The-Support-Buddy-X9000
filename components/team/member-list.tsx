@@ -15,15 +15,15 @@ interface MemberListProps {
 }
 
 const roleStyles: Record<string, string> = {
-  "org:admin": "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
-  "org:analyst": "bg-blue-100 text-blue-700 border-blue-200",
-  "org:viewer": "bg-slate-100 text-slate-600 border-slate-200",
+  owner: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+  admin: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+  member: "bg-blue-100 text-blue-700 border-blue-200",
 };
 
 const roleLabels: Record<string, string> = {
-  "org:admin": "Admin",
-  "org:analyst": "Analyst",
-  "org:viewer": "Viewer",
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
 };
 
 export function MemberList({ members }: MemberListProps) {

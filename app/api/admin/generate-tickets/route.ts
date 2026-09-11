@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { inngest } from "@/inngest/client";
 import { getEnv } from "@/lib/env";
@@ -17,7 +17,7 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   const { userId, orgRole } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (orgRole !== "org:admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  if (orgRole !== "owner" && orgRole !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   const body = await request.json();
   const parsed = schema.safeParse(body);
