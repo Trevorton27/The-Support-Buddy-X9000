@@ -1,48 +1,215 @@
-# AI Support Operations Platform
+# The Support Buddy X9000
 
-A portfolio-grade multi-agent AI system for automated support ticket investigation. When a support ticket is submitted, a LangGraph-orchestrated pipeline of specialized AI agents runs in the background — classifying the ticket, analyzing logs, retrieving relevant runbooks via RAG, correlating incidents and deployments, generating root-cause hypotheses, drafting a customer reply, enforcing guardrails, and routing through a human-in-the-loop approval queue before delivery.
+An agentic AI platform that autonomously investigates support tickets, reproduces bugs, and submits code fixes — with human oversight at every critical decision point.
 
-Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ships with a production RAG knowledge base (heading-aware chunking, HuggingFace cross-encoder reranking, `[KB-N]` citation labels wired through every agent), a full eval system, incident clustering, real-time agent telemetry, adapter-based external integrations (Slack, Sentry, Datadog, Zendesk), and a Devin AI integration for automated bug reproduction and code fixes.
+When a support ticket arrives, a LangGraph-orchestrated pipeline of 9 specialized AI agents runs in the background: classifying the issue, analyzing logs, retrieving runbooks via RAG, correlating incidents and deployments, generating root-cause hypotheses, drafting a customer reply, enforcing guardrails, and routing through human-in-the-loop approval. After approval, **Devin AI** can autonomously reproduce the bug in a sandboxed environment and submit a pull request with the fix.
 
-> **New to the platform?** Read the full **[User Manual](docs/USER_MANUAL.md)** for a guided tour of every screen and feature.
-
-**In this article**
-
-- [Demo Walkthrough](#demo-walkthrough)
-- [Tech Stack](#tech-stack)
-- [File Structure](#file-structure)
-- [Authentication Flow](#authentication-flow)
-- [Agent Pipeline Data Flow](#agent-pipeline-data-flow)
-- [HITL Approval Flow](#hitl-approval-flow)
-- [Guardrails](#guardrails)
-- [Incident Clustering](#incident-clustering)
-- [Devin AI Integration](#devin-ai-integration)
-- [Eval System](#eval-system)
-- [Database Schema](#database-schema)
-- [RAG Knowledge Base](#rag-knowledge-base)
-- [Setup](#setup)
-- [Key Commands](#key-commands)
-- [Optional Integrations](#optional-integrations)
-- [Demo Tickets](#demo-tickets)
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
 
 ---
 
-## Demo Walkthrough
+**In this article**
 
-1. Sign in → redirected to `/dashboard` (KPI overview)
-2. Navigate to `/tickets` → 7 pre-seeded support tickets
-3. Click any ticket → view ticket detail + customer context
-4. Click **Run Investigation** → fires background agent pipeline
-5. Redirected to `/investigations/[runId]` → watch agent steps appear in real time (2s polling); view token usage, timing bar, evidence panel, guardrails badge per step
-6. Investigation reaches `awaiting_approval` → appears in `/approvals` with SLA timer
-7. Reviewer edits draft reply → clicks **Approve** or **Reject** → Slack notification sent
-8. Incidents auto-clustered at `/incidents` — P0/P1/P2 severity banners, status-page editor, affected-customer table
-9. Eval runs visible at `/eval` — pass rate trend chart, per-dimension scores per golden example
-10. Org members listed at `/team` via Clerk Organizations
-11. Browse the Knowledge Library at `/knowledge` — search, filter by source type, view documents with LLM summaries and chunk content
-12. On any ticket detail page, the **Knowledge Context** panel auto-retrieves relevant articles and runbooks with `[KB-N]` citation labels and similarity score bars; manual search available inline
-13. On a completed investigation, click **"Reproduce with Devin"** → Devin reproduces the bug in a sandboxed session → verdict appears in Mission Control
-14. After approving an investigation, click **"Send to Devin (Fix)"** → Devin creates a branch, implements a fix, opens a PR → PR link appears on the task card
+- [Agentic AI Architecture](#agentic-ai-architecture)
+- [Devin AI Integration](#devin-ai-integration)
+- [Demo Lab](#demo-lab)
+- [Screenshots](#screenshots)
+- [Tech Stack](#tech-stack)
+- [End-to-End Walkthrough](#end-to-end-walkthrough)
+- [Agent Pipeline](#agent-pipeline)
+- [HITL Approval Flow](#hitl-approval-flow)
+- [Guardrails](#guardrails)
+- [GitHub Issue Sync](#github-issue-sync)
+- [Mission Control](#mission-control)
+- [Incident Clustering](#incident-clustering)
+- [RAG Knowledge Base](#rag-knowledge-base)
+- [Eval System](#eval-system)
+- [Database Schema](#database-schema)
+- [File Structure](#file-structure)
+- [Setup](#setup)
+- [Key Commands](#key-commands)
+- [Optional Integrations](#optional-integrations)
+
+---
+
+## Agentic AI Architecture
+
+The platform is built around **three layers of autonomous AI agents** that collaborate to resolve support issues end-to-end:
+
+### Layer 1: Investigation Agents (LangGraph)
+
+Nine specialized agents run as a directed acyclic graph, each with a single responsibility:
+
+```
+Ticket submitted
+  |
+  v
+[Intake Agent] --> classify severity, category, product
+  |
+  v
+[Customer Context Agent] --> fetch account history, plan tier, region
+  |
+  +--> [Log Analysis Agent] -----------> error patterns, stack traces (+ Datadog)
+  +--> [Knowledge Agent] --------------> RAG search + HF reranker --> [KB-N] citations
+  +--> [Incident Correlation Agent] ---> match past incidents (+ Sentry)
+  +--> [Deployment Correlation Agent] -> recent deploys near issue window
+  |
+  v  (all 4 run in parallel)
+[Root Cause Agent] --> rank hypotheses with confidence scores
+  |
+  v
+[Response Agent] --> draft customer-facing reply with [KB-N] citations
+  |
+  v
+[Guardrails Agent] --> PII/secret detection + policy enforcement
+  |
+  v
+[Escalation Agent] --> internal notes, optional GitHub/Jira issue
+```
+
+Every agent creates an auditable `AgentStep` record with token usage, timing, tools called, and confidence scores — viewable in the real-time investigation trace.
+
+### Layer 2: Devin AI (Autonomous Coding Agent)
+
+After investigation, Devin AI takes over for code-level work:
+- **Reproduce**: Validates the bug exists in the codebase
+- **Fix**: Creates a branch, implements the fix, opens a PR
+- **Author Defects**: Generates realistic bugs for testing the pipeline
+
+### Layer 3: Mission Control (Work Orchestration)
+
+An AI-powered work queue that processes signals from all sources, prioritizes work items, and provides shift briefings — ensuring nothing falls through the cracks.
+
+---
+
+## Devin AI Integration
+
+The platform integrates with [Cognition AI's Devin](https://devin.ai) to close the loop from support ticket to code fix — fully autonomously, with human authorization gates.
+
+![Devin AI Dashboard](docs/screenshots/devin-dashboard.png)
+
+### How It Works
+
+```
+Investigation completes
+  |
+  |-- User clicks "Reproduce with Devin"
+  |     |
+  |     v
+  |   POST /api/devin/tasks { mode: "reproduce" }
+  |     |-- Build prompt from investigation context
+  |     |   (hypotheses, logs, KB chunks, deployments)
+  |     |-- Create DevinTask (status: "queued") + WorkItem
+  |     |-- Fire Inngest "devin/task.created"
+  |     v
+  |   pollDevinTaskFunction (Inngest)
+  |     |-- Step 1: Create Devin session via API
+  |     |-- Step 2: Poll every 2min (max 90 polls / ~3h)
+  |     |   Update status, verdict, PR URL on each poll
+  |     |-- Step 3: Parse result + complete WorkItem
+  |     v
+  |   Verdict: REPRODUCED / UNABLE_TO_REPRODUCE / etc.
+  |
+  |-- After approval: User clicks "Send to Devin (Fix)"
+        |
+        v
+      Same flow with mode: "fix"
+        |-- Prompt includes approved reply, reviewer notes
+        |-- Devin creates branch + opens PR
+        v
+      Pull Request on support-buddy-demo-product
+```
+
+![Reproduce with Devin](docs/screenshots/devin-reproduce.png)
+
+### Three Modes
+
+| Mode | Trigger | Who Can Use | Output |
+|------|---------|-------------|--------|
+| **Reproduce** | Investigation complete | Any authenticated user | Verdict (REPRODUCED, UNABLE_TO_REPRODUCE, etc.) |
+| **Fix** | Investigation approved | Admin only | Pull Request URL |
+| **Author Defect** | Demo Lab wizard | Admin only | New bug scenario with regression test |
+
+### Devin Dashboard (`/devin`)
+
+A dedicated monitoring page with:
+- **Stats grid**: Total tasks, active, finished, failed, reproduced, fixes submitted, avg polls
+- **Filter bar**: All / Active / Reproduce / Fix / Author / Finished / Failed
+- **Expandable task rows**: Status badges, verdict, session links, PR links, message/cancel actions
+
+![Devin Task with PR](docs/screenshots/devin-fix-pr.png)
+
+### Security
+
+- All ticket/log/KB content wrapped in `--- BEGIN UNTRUSTED EVIDENCE ---` / `--- END UNTRUSTED EVIDENCE ---` delimiters with injection warnings
+- PII (email, phone) redacted from customer context before prompt construction
+- No production credentials sent to Devin; no auto-merge capability
+- `DEVIN_API_KEY` accessed server-side only via `lib/env.ts`
+- All state changes produce `WorkItemEvent` audit trail records
+
+### Mock Mode
+
+When `DEVIN_API_KEY` is not set, the mock adapter simulates sessions that cycle `working -> working -> finished` with deterministic verdicts. No external API calls are made.
+
+---
+
+## Demo Lab
+
+The Demo Lab provides a controlled environment for end-to-end testing of the entire agentic pipeline — from bug injection through investigation to Devin-powered fix.
+
+![Demo Lab](docs/screenshots/demo-lab.png)
+
+### Scenario Lifecycle
+
+```
+[Available] --activate--> [Broken] --create_ticket--> [Ticket Open]
+    |                                                       |
+    |                                              --investigate-->
+    |                                                       |
+    |                                              [Investigating]
+    |                                                       |
+    |                                           [Awaiting Approval]
+    |                                                       |
+    |                                          [Devin Reproducing]
+    |                                                       |
+    |                                            [Devin Fixing]
+    |                                                       |
+    |                                              [PR Ready]
+    |                                                       |
+    +<--------------------reset-----------------------[Fixed]
+```
+
+### Features
+
+- **Activate Issue**: Injects a real code defect into the demo product repo
+- **Run Entire Demo**: One-click orchestration of the full lifecycle via Inngest
+- **Mutate**: LLM-powered variation of existing scenarios (GPT-4o generates novel bugs)
+- **Devin: Author Defect**: Multi-step wizard that dispatches Devin to create new defects with regression tests and manifest files
+- **GitHub Issue Sync**: Every ticket auto-creates a rich GitHub issue on the demo product repo
+
+### Defect Author Wizard
+
+A guided flow for creating AI-authored bugs:
+
+1. **Select service** (auth, webhook, order, billing, rate-limiter, database)
+2. **Choose defect class** (off-by-one, race condition, missing null check, stale cache, etc.)
+3. **Set difficulty** (easy / medium / hard)
+4. **Add guidance** (optional natural language instructions)
+5. **Confirm and dispatch** to Devin
+
+---
+
+## Screenshots
+
+| View | Description |
+|------|-------------|
+| ![Dashboard](docs/screenshots/dashboard-overview.png) | **Dashboard** — KPI overview with ticket volume, resolution times, and agent performance |
+| ![Investigation](docs/screenshots/investigation-pipeline.png) | **Investigation Pipeline** — Real-time agent trace with clickable steps, token usage, timing bar, and evidence panel |
+| ![Devin Dashboard](docs/screenshots/devin-dashboard.png) | **Devin AI Dashboard** — Monitor all Devin sessions with stats, filters, and expandable task details |
+| ![Approval Queue](docs/screenshots/approval-queue.png) | **Approval Queue** — HITL review with SLA timers, customer tier badges, and draft editor |
+| ![Mission Control](docs/screenshots/mission-control.png) | **Mission Control** — AI-prioritized work queue with shift briefings and responsibility tracking |
+| ![Demo Lab](docs/screenshots/demo-lab.png) | **Demo Lab** — Scenario cards with one-click activation, full demo orchestration, and mutation |
+| ![GitHub Sync](docs/screenshots/github-issue-sync.png) | **GitHub Issue Sync** — Tickets auto-create rich GitHub issues with reproduction steps and acceptance criteria |
 
 ---
 
@@ -53,324 +220,73 @@ Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, and Clerk. Ship
 | Framework | Next.js 15 (App Router, React 19) |
 | Auth | Clerk (`@clerk/nextjs` v6) with Organizations |
 | Agent orchestration | LangGraph.js (`@langchain/langgraph`) |
+| Autonomous coding | Devin AI (Cognition) |
 | LLM | OpenAI `gpt-4o` (reasoning), `gpt-4o-mini` (classification / guardrails / eval) |
 | Embeddings | OpenAI `text-embedding-3-small` (1536d) |
-| Reranker | HuggingFace Inference API (`cross-encoder/ms-marco-MiniLM-L-6-v2`) — optional |
+| Reranker | HuggingFace Inference API (`cross-encoder/ms-marco-MiniLM-L-6-v2`) |
 | Background jobs | Inngest v3 |
 | Database | PostgreSQL 16 + pgvector |
 | ORM | Prisma 6 |
 | UI | shadcn/ui (Radix primitives) + Tailwind CSS v3 |
 | Validation | Zod |
-| Local DB | Docker Compose (`pgvector/pgvector:pg16`) |
 
 ---
 
-## File Structure
+## End-to-End Walkthrough
 
-```
-signal-ops-ai-v1/
-│
-├── app/                              # Next.js App Router
-│   ├── layout.tsx                    # Root layout — ClerkProvider, global CSS
-│   ├── page.tsx                      # Public landing page (redirects if authed)
-│   ├── globals.css
-│   ├── sign-in/[[...sign-in]]/
-│   ├── sign-up/[[...sign-up]]/
-│   │
-│   ├── (dashboard)/                  # Protected route group
-│   │   ├── layout.tsx                # Async Server Component — sidebar + OrganizationSwitcher + pending-approvals badge
-│   │   ├── dashboard/page.tsx        # KPI cards + recent investigations
-│   │   ├── tickets/
-│   │   │   ├── page.tsx              # Filterable ticket list
-│   │   │   └── [ticketId]/page.tsx   # Ticket detail + investigation panel + incident banner
-│   │   ├── investigations/
-│   │   │   ├── page.tsx              # All investigation runs
-│   │   │   └── [runId]/page.tsx      # Full trace view — timeline, timing bar, evidence panel, hypotheses, reply
-│   │   ├── approvals/                # Phase 3 — HITL review
-│   │   │   ├── page.tsx              # Approval queue with SLA timers + customer tier badges
-│   │   │   └── [runId]/page.tsx      # Draft editor + diff + approve/reject
-│   │   ├── incidents/                # Phase 6 — incident management
-│   │   │   ├── page.tsx              # Incident list with P0/P1/P2 severity banners
-│   │   │   └── [id]/page.tsx         # Detail: affected customers, status-page editor, timeline
-│   │   ├── eval/                     # Phase 7 — eval system
-│   │   │   ├── page.tsx              # Eval run history + pass rate trend chart
-│   │   │   ├── [runId]/page.tsx      # Per-example scores + dimension breakdowns
-│   │   │   └── examples/page.tsx     # Golden example browser
-│   │   ├── knowledge/
-│   │   │   ├── page.tsx              # Knowledge Library — search + source-type filter
-│   │   │   └── [id]/page.tsx         # Document detail — metadata, summary, chunks
-│   │   ├── team/page.tsx             # Phase 8 — org member list (Clerk API)
-│   │   ├── admin/                    # Admin: generate demo tickets/incidents
-│   │   └── settings/page.tsx         # Model info, integration cards, demo reset
-│   │
-│   └── api/
-│       ├── agents/run/route.ts       # POST — trigger investigation via Inngest
-│       ├── tickets/                  # GET list, POST create (fires "ticket/created" event)
-│       │   └── [ticketId]/           # GET, PATCH, DELETE
-│       ├── investigations/
-│       │   ├── route.ts              # GET list
-│       │   ├── pending/route.ts      # GET — awaiting_approval runs
-│       │   └── [runId]/
-│       │       ├── route.ts          # GET single run + steps
-│       │       ├── approve/route.ts  # POST — HITL approve/reject
-│       │       └── steps/[stepId]/   # GET — step detail for drawer
-│       ├── incidents/                # GET list, POST create
-│       │   ├── suggest/route.ts      # GET — candidate ticket clusters
-│       │   └── [id]/
-│       │       ├── route.ts          # GET detail, PATCH status/severity
-│       │       └── tickets/route.ts  # POST — link ticket to incident
-│       ├── devin/
-│       │   └── tasks/                # GET list, POST create
-│       │       └── [taskId]/
-│       │           ├── route.ts      # GET — single task detail
-│       │           ├── cancel/       # POST — cancel task + stop Devin session
-│       │           └── message/      # POST — send message to Devin session
-│       ├── integrations/
-│       │   ├── devin/test/           # POST — test Devin API connection
-│       │   ├── slack/test/           # POST — test Slack webhook
-│       │   └── zendesk/
-│       │       ├── simulate/         # GET — create demo ticket via Zendesk mock
-│       │       └── import/           # POST — Zendesk webhook receiver
-│       ├── eval/
-│       │   ├── runs/route.ts         # GET list, POST trigger
-│       │   ├── runs/[id]/route.ts    # GET single run with results
-│       │   └── examples/route.ts     # GET list, POST create
-│       ├── knowledge/
-│       │   ├── documents/route.ts    # GET — list with sourceType/productArea/q filters
-│       │   ├── documents/[id]/route.ts  # GET — single doc with chunks
-│       │   ├── retrieve/route.ts     # POST — ad-hoc retrieval (returns evidence + optional [KB-N] block)
-│       │   └── ingest/route.ts       # POST — admin: trigger background ingestion
-│       ├── tickets/[ticketId]/
-│       │   └── retrieve-context/route.ts  # POST — auto-retrieve context for a ticket
-│       ├── search/route.ts           # GET — pgvector RAG search (legacy)
-│       ├── seed/route.ts             # POST — demo database reset
-│       └── webhooks/inngest/         # Inngest receiver (GET/POST/PUT) — public
-│
-├── agents/                           # Agent pipeline (server-only)
-│   ├── graph.ts                      # LangGraph StateGraph — pipeline entry point
-│   ├── state.ts                      # InvestigationState + all shared types
-│   ├── nodes/
-│   │   ├── intake-agent.ts           # Classify ticket category/severity
-│   │   ├── customer-context-agent.ts # Fetch customer record + recent deployments
-│   │   ├── log-analysis-agent.ts     # Error patterns (+ Datadog adapter)
-│   │   ├── knowledge-agent.ts        # RAG search → rerank → return top 5 chunks
-│   │   ├── incident-correlation-agent.ts   # Match related past incidents (+ Sentry adapter)
-│   │   ├── deployment-correlation-agent.ts # Match relevant deployments
-│   │   ├── root-cause-agent.ts       # Rank hypotheses with confidence scores
-│   │   ├── response-agent.ts         # Draft customer-facing reply
-│   │   ├── guardrails-agent.ts       # Phase 2 — PII/secret/policy enforcement + optional LLM revision
-│   │   └── escalation-agent.ts       # Internal escalation note; optionally posts to GitHub / Jira
-│   ├── prompts/                      # LLM system prompts loaded via fs.readFileSync
-│   │   ├── intake.md
-│   │   ├── log-analysis.md
-│   │   ├── knowledge-retrieval.md
-│   │   ├── root-cause.md
-│   │   ├── response-drafting.md
-│   │   ├── guardrails.md             # Guardrails policy prompt
-│   │   ├── escalation.md
-│   │   └── eval-judge.md             # LLM judge scoring rubric
-│   └── tools/
-│       ├── ticket-tool.ts
-│       ├── logs-tool.ts
-│       ├── docs-tool.ts              # pgvector search → rerankChunks → top 5
-│       ├── customer-tool.ts
-│       ├── incident-tool.ts
-│       └── escalation-tool.ts
-│
-├── components/
-│   ├── agents/
-│   │   ├── agent-timeline.tsx        # Live pipeline with clickable steps (2s polling)
-│   │   ├── step-detail-drawer.tsx    # Slide-over: full step input/output/tools
-│   │   ├── evidence-panel.tsx        # KB chunks with similarity + rerank scores
-│   │   ├── token-usage-badge.tsx     # "1.2k tokens · ~$0.002"
-│   │   ├── pipeline-timing-bar.tsx   # Gantt-style timing bar
-│   │   ├── guardrails-badge.tsx      # Warn/block flag indicators
-│   │   ├── hypothesis-card.tsx
-│   │   └── agent-output-card.tsx
-│   ├── approvals/
-│   │   ├── approval-queue-table.tsx  # SLA countdown, customer tier badge
-│   │   └── reply-editor.tsx          # Textarea + original/edited diff + approve/reject
-│   ├── incidents/
-│   │   ├── incident-header.tsx       # P0/P1/P2 severity banner
-│   │   ├── affected-customers-table.tsx
-│   │   ├── status-page-editor.tsx    # Preview/edit textarea (client component)
-│   │   └── incident-timeline.tsx     # Vertical timeline from internalTimeline JSON
-│   ├── eval/
-│   │   ├── score-card.tsx            # Per-dimension score bars
-│   │   └── pass-rate-chart.tsx       # Pure CSS/SVG bar chart trend
-│   ├── knowledge/
-│   │   ├── knowledge-library.tsx     # Debounced search + source-type sidebar filter (client)
-│   │   ├── knowledge-document-detail.tsx  # Doc view: metadata, summary, collapsible chunks (client)
-│   │   ├── ticket-context-panel.tsx  # Auto-retrieve + manual search panel on ticket detail (client)
-│   │   └── source-type-badge.tsx     # Colour-coded badge for all 8 source types
-│   ├── devin/
-│   │   ├── reproduce-button.tsx      # "Reproduce with Devin" button + confirmation (client)
-│   │   ├── fix-button.tsx            # "Send to Devin (Fix)" button + warning dialog (client)
-│   │   ├── devin-task-card.tsx       # Task status, verdict, PR link, cancel/message (client)
-│   │   └── devin-tasks-section.tsx   # List of DevinTaskCards for an investigation (client)
-│   ├── settings/
-│   │   ├── integration-card.tsx      # Live/mock indicator + test button (client component)
-│   │   └── demo-reset.tsx            # Reset button (client component)
-│   ├── team/
-│   │   └── member-list.tsx           # Org member table with role badges
-│   ├── dashboard/
-│   ├── tickets/
-│   └── ui/                           # shadcn/ui primitives
-│
-├── inngest/
-│   ├── client.ts                     # Inngest client singleton + event types
-│   └── functions.ts                  # runInvestigationFunction (HITL) + clusterTicketsFunction + pollDevinTaskFunction
-│
-├── lib/
-│   ├── db.ts                         # Prisma client singleton (hot-reload safe)
-│   ├── auth.ts                       # requireAuth() + requireOrgAuth()
-│   ├── env.ts                        # Zod-validated env vars (server-only)
-│   ├── embeddings.ts                 # embedText() — text-embedding-3-small
-│   ├── vector-search.ts              # searchKnowledge(), searchKnowledgeFiltered(), searchKnowledgeKeyword()
-│   ├── knowledge-chunker.ts          # Heading-aware markdown chunker (~3200 chars, ~600 overlap)
-│   ├── knowledge-retrieval.ts        # Full retrieval pipeline: embed → filter → rerank → [KB-N] labels
-│   ├── agent-utils.ts                # extractTokenUsage(), estimateCostUsd(), formatCostUsd()
-│   ├── guardrails-rules.ts           # Deterministic PII/secret regex checks → GuardrailFlag[]
-│   ├── reranker.ts                   # HF cross-encoder with 5-min cache + fallback
-│   ├── incident-clustering.ts        # Heuristic clustering (same product/category/region, 4h window)
-│   ├── eval-runner.ts                # Eval orchestration — runs graph directly (bypasses Inngest)
-│   ├── eval-judge.ts                 # gpt-4o-mini judge scoring 4 dimensions
-│   ├── logger.ts                     # Structured JSON logger
-│   ├── utils.ts                      # cn(), formatDuration(), truncate(), slugify(), severityColor()
-│   └── integrations/
-│       ├── types.ts                  # IIntegrationAdapter interface
-│       ├── sentry/{client,mock,index}.ts
-│       ├── slack/{client,mock,index}.ts
-│       ├── datadog/{mock,index}.ts
-│       ├── zendesk/{mock,index}.ts
-│       └── devin/
-│           ├── types.ts             # DevinSession, IDevinAdapter, status mapping, Zod schemas
-│           ├── client.ts            # Live Devin API client (Bearer auth, 30s timeouts)
-│           ├── mock.ts              # Mock adapter (deterministic state cycling)
-│           ├── index.ts             # Factory: live if DEVIN_API_KEY set, mock otherwise
-│           ├── prompt-builder.ts    # buildReproductionPrompt(), buildFixPrompt() with PII redaction
-│           └── result-parser.ts     # parseDevinResult() with structured output → message → status fallback
-│
-├── prisma/
-│   ├── schema.prisma                 # All models
-│   └── seed.ts
-│
-├── scripts/
-│   ├── seed-db.ts                    # Insert demo customers + tickets
-│   ├── ingest-docs.ts                # Embed knowledge-base/ into pgvector (legacy)
-│   ├── reset-demo.ts                 # Clear + re-seed + re-ingest
-│   ├── knowledge-ingest.ts           # Parse front-matter, chunk, embed → KnowledgeDocument + KnowledgeChunk
-│   ├── knowledge-reset.ts            # Delete managed knowledge docs/chunks (preserves legacy)
-│   ├── knowledge-evaluate.ts         # Retrieval eval: hit@1/3/5 against golden query set
-│   ├── run-eval.ts                   # CLI eval runner
-│   └── export-eval-data.ts           # Bootstrap EvalExample rows from approved runs
-│
-├── docs/
-│   └── USER_MANUAL.md                # "A User's Manual: Getting To Know The Support Buddy X9000"
-│
-├── __tests__/                        # Unit tests (Vitest)
-│   ├── utils.test.ts
-│   ├── guardrails-rules.test.ts
-│   ├── agent-utils.test.ts
-│   ├── devin-prompt-builder.test.ts
-│   ├── devin-result-parser.test.ts
-│   ├── devin-mock.test.ts
-│   ├── devin-types.test.ts
-│   └── ui/
-│       ├── devin-task-card.test.tsx
-│       └── devin-reproduce-button.test.tsx
-│
-├── data/                             # Static JSON demo fixtures
-│   ├── customers.json
-│   ├── tickets.json
-│   ├── logs.json
-│   ├── traces.json
-│   ├── incidents.json
-│   ├── deployments.json
-│   └── sentry-issues.json
-│
-├── knowledge-base/                   # Legacy RAG source documents (Markdown, ingest-docs.ts)
-│   ├── runbooks/
-│   ├── product-docs/
-│   └── internal-notes/
-│
-├── knowledge/                        # Managed knowledge base (knowledge-ingest.ts)
-│   ├── runbooks/
-│   ├── product-docs/
-│   ├── architecture-docs/
-│   ├── incident-reports/
-│   ├── support-tickets/
-│   └── evals/
-│       └── retrieval-eval.json       # Golden query set for hit@K evaluation
-│
-├── middleware.ts                     # Clerk auth gate
-├── next.config.ts
-├── vitest.config.ts
-├── docker-compose.yml
-├── .env.example
-└── CLAUDE.md
-```
+1. **Sign in** -- redirected to `/dashboard` (KPI overview)
+2. **Browse tickets** at `/tickets` -- pre-seeded support tickets with customer context
+3. **Click any ticket** -- view detail, customer history, knowledge context panel
+4. **Run Investigation** -- fires background agent pipeline via Inngest
+5. **Watch agents work** at `/investigations/[runId]` -- real-time step updates (2s polling), token usage, timing bar, evidence panel, guardrails badge
+6. **Review at `/approvals`** -- investigation reaches `awaiting_approval` with SLA timer
+7. **Approve or reject** -- edit draft reply, add reviewer notes, one-click approve/reject
+8. **Reproduce with Devin** -- click on investigation to dispatch Devin for bug reproduction
+9. **Fix with Devin** -- after approval, dispatch Devin to create a branch and open a PR
+10. **Monitor at `/devin`** -- track all Devin sessions, filter by mode/status, view verdicts and PR links
+11. **GitHub issues auto-created** -- every ticket syncs to `support-buddy-demo-product` with full bug context
+12. **Incidents auto-clustered** at `/incidents` -- P0/P1/P2 severity banners, status-page editor
+13. **Demo Lab** at `/demo-lab` -- activate scenarios, run full demos, mutate bugs, author defects with Devin
+14. **Mission Control** at `/mission-control` -- AI-prioritized work queue, shift briefings, responsibility tracking
+15. **Eval suite** at `/eval` -- pass rate trends, per-dimension scoring across golden test cases
 
 ---
 
-## Authentication Flow
+## Agent Pipeline
 
-```
-Browser                    Clerk                    App
-  │                          │                        │
-  │── GET /dashboard ────────┼────────────────────────►
-  │                          │         middleware.ts runs
-  │                          │         auth().protect() called
-  │                          │         no session found
-  │◄─────────────── 302 redirect to /sign-in ─────────│
-  │                          │                        │
-  │── POST /sign-in ─────────►                        │
-  │   (email + password)     │ validates credentials  │
-  │◄─── session cookie ──────│                        │
-  │                          │                        │
-  │── GET /dashboard ────────┼────────────────────────►
-  │                          │         auth() → userId present
-  │◄──────────── 200 /dashboard page ─────────────────│
-```
-
-- `middleware.ts` — `clerkMiddleware` protects all routes except `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks/(.*)`
-- `lib/auth.ts` exports `requireAuth()` → `{ userId }` and `requireOrgAuth()` → `{ userId, orgId, orgRole }`
-- Server Components call `auth()` from `@clerk/nextjs/server` directly
-
----
-
-## Agent Pipeline Data Flow
-
-### 1. Trigger (HTTP)
+### Trigger
 
 ```
 User clicks "Run Investigation"
-  │
-  └─► POST /api/agents/run  { ticketId }
-        ├─ Verify ticket exists (Prisma)
-        ├─ Create InvestigationRun  { status: "pending" }
-        ├─ inngest.send("investigation/run.requested", { ticketId, runId })
-        └─ Return { runId } → browser redirects to /investigations/[runId]
+  |
+  v
+POST /api/agents/run  { ticketId }
+  |-- Verify ticket exists (Prisma)
+  |-- Create InvestigationRun { status: "pending" }
+  |-- inngest.send("investigation/run.requested")
+  v
+Return { runId } --> browser redirects to /investigations/[runId]
 ```
 
-### 2. Background Execution (Inngest → LangGraph)
+### Background Execution (Inngest + LangGraph)
 
 ```
 Inngest picks up "investigation/run.requested"
-  │
-  └─► runInvestigationFunction
-        │
-        Step 1 — execute graph:
-          intake → customer_context
-            → parallel(log_analysis, knowledge_retrieval,
-                       incident_correlation, deployment_correlation)
-            → root_cause → response_drafting → guardrails → escalation
-        Step 2 — set status: "awaiting_approval", approvalStatus: "pending"
-        Step 3 — step.waitForEvent("investigation/approval.submitted", timeout: "72h")
-        Step 4 — process approval (write ApprovalAudit, post Slack, update run)
+  |
+  v
+runInvestigationFunction
+  |
+  Step 1: Execute graph
+    intake --> customer_context
+      --> parallel(log_analysis, knowledge_retrieval,
+                   incident_correlation, deployment_correlation)
+      --> root_cause --> response_drafting --> guardrails --> escalation
+  Step 2: Set status "awaiting_approval"
+  Step 3: step.waitForEvent("investigation/approval.submitted", timeout: "72h")
+  Step 4: Process approval (write ApprovalAudit, post Slack, update run)
 ```
 
-### 3. Per-Agent Step Pattern
+### Per-Agent Pattern
 
 Every agent node follows this pattern:
 
@@ -380,28 +296,31 @@ const step = await prisma.agentStep.create({
   data: { investigationRunId, agentName, status: "running", input: {...} }
 });
 
-// 2. Do work
+// 2. Do work (LLM call)
 const response = await openai.chat.completions.create({...});
 const tokenUsage = extractTokenUsage(response);
 
 // 3. Record completion
 await prisma.agentStep.update({
   where: { id: step.id },
-  data: { status: "complete", output: result, tokenUsage: JSON.parse(JSON.stringify(tokenUsage)), completedAt: new Date() }
+  data: { status: "complete", output: result, tokenUsage, completedAt: new Date() }
 });
 
-// 4. Return state patch
+// 4. Return state patch (never mutate state directly)
 return { fieldName: parsedResult };
 ```
 
-### 4. Real-Time UI Updates
+### Real-Time UI
 
 ```
 Browser (/investigations/[runId])
-  └─ AgentTimeline (Client Component)
-       ├─ setInterval(router.refresh, 2000) while status = "running"
-       └─ Each refresh → Server Component re-fetches InvestigationRun + AgentStep[]
+  |
+  AgentTimeline (Client Component)
+    |-- setInterval(router.refresh, 2000) while status = "running"
+    |-- Each refresh re-fetches InvestigationRun + AgentStep[]
 ```
+
+![Investigation Pipeline](docs/screenshots/investigation-pipeline.png)
 
 ---
 
@@ -409,20 +328,25 @@ Browser (/investigations/[runId])
 
 ```
 Investigation completes
-  │
-  ├─ Inngest sets status: "awaiting_approval"
-  ├─ Run appears in /approvals with SLA timer
-  │
-  └─ Reviewer opens /approvals/[runId]
-       ├─ Sees original draft + editable textarea
-       ├─ Clicks Approve or Reject
-       │
-       └─► POST /api/investigations/[runId]/approve
-             ├─ Writes ApprovalAudit (original draft, final draft, reviewer note, actor)
-             ├─ Updates InvestigationRun (approvalStatus, editedReply, approvedAt)
-             └─ inngest.send("investigation/approval.submitted")
-                  └─ Inngest resumes → posts Slack notification
+  |
+  |-- Inngest sets status: "awaiting_approval"
+  |-- Run appears in /approvals with SLA timer
+  |
+  v
+Reviewer opens /approvals/[runId]
+  |-- Sees original draft + editable textarea
+  |-- Clicks Approve or Reject
+  |
+  v
+POST /api/investigations/[runId]/approve
+  |-- Write ApprovalAudit (original draft, final draft, reviewer note)
+  |-- Update InvestigationRun (approvalStatus, editedReply, approvedAt)
+  |-- inngest.send("investigation/approval.submitted")
+  v
+Inngest resumes --> posts Slack notification
 ```
+
+![Approval Queue](docs/screenshots/approval-queue.png)
 
 **Resilience:** The DB write happens before the Inngest event. If Inngest restarts, the UI always reflects the correct approval state.
 
@@ -434,210 +358,74 @@ The `guardrails-agent` runs after `response_drafting`, before `escalation`.
 
 **Two-pass approach:**
 
-1. **Deterministic pass** (`lib/guardrails-rules.ts`) — regex checks for PII (email, phone, SSN, credit card), secrets (OpenAI keys, GitHub PATs, Slack tokens, generic API keys), and internal content markers (`[INTERNAL]`, `do not share`, etc.)
-2. **LLM pass** (`gpt-4o-mini` with `agents/prompts/guardrails.md`) — broader policy enforcement; optionally revises the draft
+1. **Deterministic pass** (`lib/guardrails-rules.ts`) -- regex checks for PII (email, phone, SSN, credit card), secrets (API keys, tokens), and internal content markers
+2. **LLM pass** (`gpt-4o-mini`) -- broader policy enforcement with optional draft revision
 
-Flags are typed as `"pii" | "secret" | "internal_leak"` with severity `"warn"` or `"block"`. Results are persisted on `InvestigationRun.guardrailsResult` (JSON) and surfaced via `guardrails-badge` in the investigation trace view.
+Flags are typed as `"pii" | "secret" | "internal_leak"` with severity `"warn"` or `"block"`. Results surfaced via `guardrails-badge` in the investigation trace.
+
+---
+
+## GitHub Issue Sync
+
+Every ticket created in the platform automatically creates a corresponding GitHub issue on the demo product repository, giving Devin full context to work with.
+
+![GitHub Issue Sync](docs/screenshots/github-issue-sync.png)
+
+### How It Works
+
+```
+Ticket created (any path: UI, demo-lab, bug-generator, batch generation)
+  |
+  v
+Inngest "ticket/created" event fires
+  |
+  +---> clusterTicketsFunction (incident clustering)
+  +---> syncTicketToGitHubFunction (GitHub issue sync)
+          |
+          |-- Authenticate via GitHub App (JWT + installation token)
+          |-- Query linked DemoIssueScenario for enrichment
+          |-- Build rich issue body:
+          |     - Bug description
+          |     - Severity, category, product metadata
+          |     - Affected service and file paths
+          |     - Reproduction steps
+          |     - Acceptance criteria (as checkboxes)
+          |     - Known defect location
+          |-- POST /repos/{owner}/{repo}/issues
+          |-- Update Ticket with githubIssueUrl + githubIssueNumber
+          v
+        GitHub issue on support-buddy-demo-product
+```
+
+### Authentication
+
+Uses a **GitHub App** (preferred) with automatic JWT signing and installation token caching, falling back to a Personal Access Token if the app is not configured.
+
+---
+
+## Mission Control
+
+AI-powered work queue that unifies all operational signals into a single prioritized view.
+
+![Mission Control](docs/screenshots/mission-control.png)
+
+### Features
+
+- **Work Items**: Canonical units of responsibility with a full state machine (OPEN -> IN_PROGRESS -> COMPLETED)
+- **Priority Engine**: Deterministic scoring based on severity, SLA, customer tier, and staleness
+- **Shift Briefings**: AI-generated workload summaries
+- **Work Signals**: Immutable incoming events processed via AI action extraction
+- **Responsibility Tracking**: Who owns what, with stale-work detection
 
 ---
 
 ## Incident Clustering
 
-Ticket creation fires `"ticket/created"` via Inngest, which triggers `clusterTicketsFunction`.
+Ticket creation fires `"ticket/created"` via Inngest, which triggers automatic clustering.
 
 **Heuristic:** Group open/in-progress tickets by `(product, category, region)` opened within a 4-hour sliding window. Groups of 2+ become `Incident` records automatically.
 
-```
-ticket/created event
-  └─► clusterTicketsFunction
-        └─ lib/incident-clustering.ts::suggestClusters()
-             ├─ Fetch open tickets without incident links
-             ├─ Group by product + category + region
-             ├─ Sliding 4h window — find groups of ≥ 2
-             └─ Auto-create/update Incident records
-```
-
-Manual clustering is also available at `/api/incidents/suggest` (GET) and `/incidents` admin UI.
-
----
-
-## Devin AI Integration
-
-The platform integrates with [Cognition AI's Devin](https://devin.ai) to provide automated bug reproduction and narrowly scoped code fixes after human authorization.
-
-### Architecture
-
-```
-Investigation completes
-  │
-  ├─ User clicks "Reproduce with Devin"
-  │    └─► POST /api/devin/tasks { mode: "reproduce" }
-  │         ├─ Build prompt from investigation context (hypotheses, logs, KB chunks, deployments)
-  │         ├─ Create DevinTask (status: "queued") + WorkItem
-  │         └─ Fire Inngest "devin/task.created"
-  │              └─► pollDevinTaskFunction
-  │                   ├─ Step 1: Create Devin session via API
-  │                   ├─ Step 2: Poll every 2min (max 90 polls / ~3h)
-  │                   │    └─ Update status, verdict, PR URL on each poll
-  │                   └─ Step 3: Parse final result + complete WorkItem
-  │
-  └─ After approval: User clicks "Send to Devin (Fix)" (admin only)
-       └─► Same flow but with mode: "fix"
-            ├─ Prompt includes approved reply, reviewer notes, PR authorization
-            └─ Devin creates branch + opens PR (auto-merge NOT authorized)
-```
-
-### Modes
-
-| Mode | Trigger | Authorization | Output |
-|------|---------|--------------|--------|
-| **Reproduce** | Investigation complete or awaiting approval | Any authenticated user | Verdict (REPRODUCED / UNABLE_TO_REPRODUCE / etc.) |
-| **Fix** | Investigation approved | Admin role required | Pull Request URL |
-
-### Security
-
-- Prompts wrap all ticket/log/KB content in `--- BEGIN UNTRUSTED EVIDENCE ---` / `--- END UNTRUSTED EVIDENCE ---` delimiters with explicit injection warnings
-- PII (email, phone) redacted from customer context before prompt construction
-- No production credentials sent to Devin; no auto-merge capability
-- `DEVIN_API_KEY` accessed server-side only via `lib/env.ts`
-- All state changes produce `WorkItemEvent` audit trail records
-
-### Mock Mode
-
-When `DEVIN_API_KEY` is not set, the mock adapter simulates sessions that cycle `working → working → finished` with deterministic verdicts. No external API calls are made.
-
----
-
-## Eval System
-
-Eval runs execute the full agent graph directly (bypassing Inngest) against a set of golden `EvalExample` records, then score outputs with an LLM judge.
-
-**Scoring dimensions** (via `gpt-4o-mini`):
-| Dimension | Weight |
-|---|---|
-| Root cause accuracy | 35% |
-| Evidence quality | 25% |
-| Response tone | 20% |
-| No hallucinations | 20% |
-
-**Bootstrap workflow:**
-```bash
-# After several approved investigations:
-npx tsx scripts/export-eval-data.ts   # → creates EvalExample rows
-
-# Run eval:
-npx tsx scripts/run-eval.ts --name nightly-v1
-```
-
-Results visible at `/eval` (pass rate trend) and `/eval/[runId]` (per-example breakdown).
-
----
-
-## Database Schema
-
-```
-Customer
-  id, name, email (unique), company, plan, region, industry, accountAge, orgId
-  └── has many Ticket
-
-Ticket
-  id, externalId (unique), title, description
-  status: "open" | "in_progress" | "resolved" | "archived"
-  severity: "critical" | "high" | "medium" | "low"
-  category?, product?, customerId, orgId
-  └── belongs to Customer
-  └── has many InvestigationRun
-  └── has many IncidentTicket
-
-InvestigationRun
-  id, ticketId, orgId
-  status: "pending" | "running" | "awaiting_approval" | "complete" | "failed"
-  approvalStatus: "pending" | "approved" | "rejected" | "timeout"
-  hypotheses: Json?           ← Hypothesis[] from root-cause-agent
-  summary: String?            ← drafted customer reply
-  escalationNote: String?
-  guardrailsPassed: Boolean
-  guardrailsResult: Json?
-  editedReply: String?        ← reviewer-edited version
-  reviewerNote: String?
-  approvedAt?, approvedBy?
-  startedAt, completedAt?, errorMessage?
-  └── has many AgentStep
-  └── has many ApprovalAudit
-
-AgentStep
-  id, investigationRunId, agentName
-  status: "pending" | "running" | "complete" | "failed"
-  input: Json?, output: Json?
-  tokenUsage: Json?           ← { promptTokens, completionTokens, totalTokens }
-  toolsCalled: String[]
-  confidenceScore: Float?
-  startedAt, completedAt?, durationMs?, errorMessage?
-
-ApprovalAudit
-  id, investigationRunId, action, actorId
-  originalDraft, finalDraft, note?
-  createdAt
-
-KnowledgeDocument
-  id, title, sourceType, sourceName, sourceUrl?
-  productArea?, tags: String[]
-  summary?                    ← optional LLM-generated summary
-  filePath (unique)
-  createdAt, updatedAt
-  └── has many KnowledgeChunk
-
-KnowledgeChunk
-  id, sourcePath, chunkIndex (unique together)
-  documentId?                 ← null for legacy chunks (ingest-docs.ts)
-  heading?                    ← active heading at chunk start
-  tokenCount?
-  content: String
-  embedding: vector(1536)     ← requires raw SQL
-
-RetrievalResult
-  id, query, ticketId?, investigationRunId?
-  chunkIds: String[]          ← returned chunk IDs
-  scores: Json                ← { chunkId → score } map
-  createdAt
-
-Incident
-  id, title, description, status, severity
-  affectedCount, internalTimeline: Json
-  createdAt, resolvedAt?
-  └── has many IncidentTicket
-
-IncidentTicket
-  incidentId, ticketId        ← join table
-
-DevinTask
-  id, orgId, devinSessionId (unique), sessionUrl, repository, branch?
-  mode: "reproduce" | "fix"
-  status: "queued" | "creating" | "working" | "blocked" | "waiting" | "pr_ready" | "finished" | "failed" | "expired" | "cancelled"
-  promptSnapshot: Json, structuredResult: Json?
-  pullRequestUrl?, verdict?, verdictReason?, errorMessage?
-  pollCount, lastPolledAt?, startedAt?, completedAt?
-  createdBy                   ← Clerk userId
-  ticketId?, investigationRunId?, workItemId? (unique)
-  └── belongs to Ticket?, InvestigationRun?, WorkItem?
-
-IntegrationConfig
-  id, name, enabled, webhookUrl?, metadata: Json?
-
-EvalExample
-  id, input: Json, expectedOutput: Json, tags: String[]
-  createdAt, source?
-
-EvalRun
-  id, name, passRate, totalExamples, passedExamples
-  startedAt, completedAt?
-  └── has many EvalResult
-
-EvalResult
-  id, evalRunId, evalExampleId
-  rootCauseScore, evidenceScore, toneScore, hallucinationScore
-  passed, rawOutput: Json?
-```
+Manual clustering also available at `/incidents`.
 
 ---
 
@@ -645,7 +433,7 @@ EvalResult
 
 ### Sources
 
-| Source type | Description |
+| Source Type | Description |
 |---|---|
 | `RUNBOOK` | Step-by-step operational runbooks |
 | `INCIDENT_REPORT` | Post-mortems and incident summaries |
@@ -656,81 +444,170 @@ EvalResult
 | `ALERT` | Alert rule definitions |
 | `LOG_SUMMARY` | Log pattern summaries |
 
-Source documents are Markdown files in `knowledge/` with optional front-matter:
-
-```markdown
-**Source Type:** RUNBOOK
-**Source Name:** Database Failover Runbook
-**Tags:** database, failover, postgres
-**Product Area:** Infrastructure
-```
-
-### Ingestion Pipeline
+### Pipeline
 
 ```
-npm run knowledge:ingest
-  └─ scripts/knowledge-ingest.ts
-       ├─ Walk knowledge/**/*.md
-       ├─ Parse front-matter → sourceType, tags, productArea, sourceName
-       ├─ lib/knowledge-chunker.ts — heading-aware chunker
-       │    ├─ Strip front-matter header lines
-       │    ├─ Split on headings + ~3200 char target (~800 tokens)
-       │    ├─ ~600 char overlap between chunks
-       │    └─ Prepend active heading to each chunk
-       ├─ Upsert KnowledgeDocument (key: filePath)
-       └─ For each chunk:
-            ├─ embedText() → float[1536] (text-embedding-3-small)
-            └─ Upsert KnowledgeChunk via prisma.$executeRaw
-                 (key: [sourcePath, chunkIndex])
-```
-
-### Retrieval Pipeline
-
-```
-lib/knowledge-retrieval.ts::retrieveKnowledge(query, options)
-  │
-  ├─ embedText(query) → float[1536]
-  ├─ searchKnowledgeFiltered(embedding, topK=15, filters?)
-  │    └─ pgvector cosine (<=>), LEFT JOIN KnowledgeDocument
-  │         optional WHERE: sourceType IN (...), tags @>, productArea =
-  ├─ Filter by minScore threshold (default 0.25)
-  ├─ searchKnowledgeKeyword() fallback if < 3 results
-  │    └─ PostgreSQL plainto_tsquery full-text search
-  ├─ rerankChunks(query, candidates) — HF cross-encoder
-  │    └─ 5-min in-memory cache; falls back to pgvector order if key absent
-  ├─ Assign [KB-1] … [KB-N] citation labels
-  └─ Write RetrievalResult audit row (skippable via skipAudit: true)
+Markdown docs in knowledge/
+  |
+  v
+Heading-aware chunker (~3200 chars, ~600 overlap)
+  |
+  v
+text-embedding-3-small --> float[1536]
+  |
+  v
+pgvector cosine search --> top 15 candidates
+  |
+  v
+HF cross-encoder reranker --> top 5
+  |
+  v
+[KB-1] ... [KB-N] citation labels
+  |
+  v
+Agents reference [KB-N] in hypotheses and customer replies
 ```
 
 ### Agent Integration
 
-Every agent that uses knowledge evidence receives a formatted citation block:
+Every agent that uses knowledge evidence receives formatted citation blocks:
 
 ```
-[KB-1] Database Failover Runbook (RUNBOOK · Infrastructure)
+[KB-1] Database Failover Runbook (RUNBOOK - Infrastructure)
 > Step 3: Promote the replica using pg_promote()...
 
 [KB-2] Incident Report: DB Lag June 2024 (INCIDENT_REPORT)
 > Root cause was a stale checkpoint on the primary...
 ```
 
-Agents (`knowledge-agent`, `root-cause-agent`, `response-agent`) are instructed via their prompts to reference `[KB-N]` labels in hypotheses, evidence arrays, and customer-facing replies.
+---
 
-### UI
+## Eval System
 
-- **`/knowledge`** — searchable, filterable library of all indexed documents; source-type sidebar; document cards with tag chips, chunk count, and relative timestamp
-- **`/knowledge/[id]`** — full document view with LLM summary, metadata header, and collapsible per-chunk accordion showing heading context and token counts
-- **Ticket Context Panel** — on every ticket detail page, auto-retrieves the top 8 relevant articles on load; groups results into Runbooks / Incidents & Tickets / Docs & Guides / Alerts & Logs; shows `[KB-N]` label, colour-coded score bar, excerpt, and expand toggle; supports inline manual search
+Eval runs execute the full agent graph directly (bypassing Inngest) against golden `EvalExample` records, then score outputs with an LLM judge.
 
-### Retrieval Evaluation
+**Scoring dimensions** (via `gpt-4o-mini`):
 
-```bash
-npm run knowledge:evaluate
-  └─ scripts/knowledge-evaluate.ts
-       ├─ Reads knowledge/evals/retrieval-eval.json (golden query set)
-       ├─ Runs retrieveKnowledge() at limit=5, minScore=0.0 per query
-       ├─ Case-insensitive substring title matching
-       └─ Reports hit@1 / hit@3 / hit@5 + miss report
+| Dimension | Weight |
+|---|---|
+| Root cause accuracy | 35% |
+| Evidence quality | 25% |
+| Response tone | 20% |
+| No hallucinations | 20% |
+
+Results visible at `/eval` (pass rate trend) and `/eval/[runId]` (per-example breakdown).
+
+---
+
+## Database Schema
+
+```
+Customer
+  id, name, email, company, plan, region, industry, orgId
+  --> has many Ticket
+
+Ticket
+  id, title, description, status, severity, category, product
+  githubIssueUrl, githubIssueNumber    <-- auto-synced
+  --> has many InvestigationRun, DevinTask
+
+InvestigationRun
+  id, ticketId, status, approvalStatus
+  hypotheses (Json), summary, editedReply, guardrailsResult (Json)
+  --> has many AgentStep, ApprovalAudit
+
+AgentStep
+  id, agentName, status, input/output (Json)
+  tokenUsage (Json), toolsCalled, confidenceScore, durationMs
+
+DevinTask
+  id, mode (reproduce|fix|defect_author), status, verdict
+  repository, branch, sessionUrl, pullRequestUrl
+  promptSnapshot (Json), structuredResult (Json)
+  pollCount, createdBy
+  --> belongs to Ticket, InvestigationRun, WorkItem
+
+WorkItem
+  id, type, status, title, summary, priorityScore
+  --> has many WorkItemEvent
+
+Incident
+  id, title, severity (P0|P1|P2), status
+  internalTimeline (Json)
+  --> has many IncidentTicket
+
+KnowledgeDocument + KnowledgeChunk
+  Heading-aware chunks with vector(1536) embeddings
+```
+
+---
+
+## File Structure
+
+```
+app/
+  (dashboard)/                    # Protected route group
+    dashboard/                    # KPI overview
+    tickets/                      # Ticket list + detail
+    investigations/               # Investigation list + trace view
+    approvals/                    # HITL approval queue
+    incidents/                    # Incident management
+    devin/                        # Devin AI dashboard
+    demo-lab/                     # Demo scenario management
+    bug-generator/                # Bug injection tool
+    mission-control/              # AI work queue
+    knowledge/                    # Knowledge library
+    generate/                     # Sample case generation
+    training/                     # Agent training
+    eval/                         # Eval suite
+    team/                         # Org members
+    settings/                     # Integration config
+  api/
+    agents/run/                   # Trigger investigation
+    tickets/                      # CRUD + fires ticket/created
+    investigations/               # List, detail, approve
+    devin/tasks/                  # Devin task CRUD + cancel/message
+    demo-lab/                     # Scenario actions + generation
+    webhooks/
+      inngest/                    # Inngest receiver
+      github/                    # GitHub webhook (push, PR, checks)
+      devin/                     # Devin session status updates
+
+agents/
+  graph.ts                        # LangGraph StateGraph
+  state.ts                        # InvestigationState types
+  nodes/                          # 9 agent implementations
+  prompts/                        # System prompts (markdown)
+  tools/                          # Data fetchers
+
+components/
+  agents/                         # Timeline, drawer, evidence panel
+  devin/                          # Dashboard, reproduce/fix buttons, task cards
+  demo-lab/                       # Scenario cards, wizard, timeline
+  mission-control/                # Priority queue, work items, briefings
+  approvals/                      # Queue table, reply editor
+  incidents/                      # Severity banners, status editor
+  knowledge/                      # Library, context panel, citations
+
+lib/
+  github-sync.ts                  # GitHub App auth + issue creation
+  integrations/devin/             # Live client, mock, prompt builder, result parser
+  demo-lab/                       # Lifecycle, git-ops, scenario generator, defect author
+  priority-engine.ts              # Deterministic work item scoring
+  signal-processor.ts             # AI action extraction
+  knowledge-retrieval.ts          # Full RAG pipeline
+  reranker.ts                     # HF cross-encoder
+  guardrails-rules.ts             # PII/secret detection
+  eval-runner.ts                  # Eval orchestration
+
+inngest/
+  functions.ts                    # All background functions:
+                                  #   runInvestigationFunction (HITL)
+                                  #   clusterTicketsFunction
+                                  #   syncTicketToGitHubFunction
+                                  #   pollDevinTaskFunction
+                                  #   runDemoScenarioFunction
+                                  #   + work signal/priority/briefing functions
 ```
 
 ---
@@ -744,59 +621,52 @@ npm run knowledge:evaluate
 - OpenAI API key
 - Clerk account
 
-### 1. Clone and install
+### Quick Start
 
 ```bash
-git clone <repo>
-cd signal-ops-ai-v1
+# 1. Clone and install
+git clone https://github.com/Trevorton27/The-Support-Buddy-X9000.git
+cd The-Support-Buddy-X9000
 npm install
-```
 
-### 2. Configure environment
-
-```bash
+# 2. Configure environment
 cp .env.example .env.local
+# Fill in DATABASE_URL, OPENAI_API_KEY, CLERK keys
+
+# 3. Start local database
+docker compose up -d
+
+# 4. Apply schema and seed
+npm run db:push
+npm run seed
+npm run ingest
+npm run knowledge:ingest
+
+# 5. Start Inngest dev server (separate terminal)
+npx inngest-cli@latest dev
+
+# 6. Start the app
+npm run dev
 ```
 
-Required vars:
+### Optional: Devin AI
+
+Set `DEVIN_API_KEY` and `DEVIN_DEFAULT_REPO` in `.env.local` to enable live Devin sessions. Without these, the mock adapter provides deterministic responses for development.
+
+### Optional: GitHub Issue Sync
+
+Set up a GitHub App for automatic issue creation:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/support_platform
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
-OPENAI_API_KEY=sk-...
-INNGEST_EVENT_KEY=local
+GITHUB_APP_ID=your-app-id
+GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
+GITHUB_APP_INSTALLATION_ID=your-installation-id
 ```
 
-### 3. Start local database
+Or use a Personal Access Token as fallback:
 
-```bash
-docker compose up -d
-```
-
-### 4. Apply schema and seed data
-
-```bash
-npm run db:push            # creates tables + enables pgvector
-npm run seed               # inserts 10 demo customers + 7 tickets
-npm run ingest             # embeds legacy knowledge-base/ into pgvector (requires OPENAI_API_KEY)
-npm run knowledge:ingest   # chunks + embeds knowledge/ → KnowledgeDocument + KnowledgeChunk
-```
-
-### 5. Start Inngest dev server (separate terminal)
-
-```bash
-npx inngest-cli@latest dev
-```
-
-### 6. Start the app
-
-```bash
-npm run dev          # http://localhost:3000
+```env
+GITHUB_TOKEN=ghp_...
 ```
 
 ---
@@ -808,39 +678,34 @@ npm run dev          # http://localhost:3000
 | `npm run dev` | Start dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm test` | Run unit tests (Vitest) |
+| `npm test` | Unit tests (Vitest) |
 | `npx tsc --noEmit` | Type-check |
-| `npm run db:push` | Sync Prisma schema → DB (dev) |
+| `npm run db:push` | Sync schema to DB (dev) |
 | `npm run db:migrate` | Create versioned migration |
-| `npm run db:generate` | Regenerate Prisma client after schema changes |
-| `npm run db:studio` | Open Prisma Studio |
 | `npm run seed` | Seed demo data |
-| `npm run ingest` | Embed legacy knowledge-base/ into pgvector |
-| `npm run reset` | Full demo reset (clear + re-seed + re-ingest) |
-| `npm run knowledge:ingest` | Chunk + embed knowledge/ → KnowledgeDocument + KnowledgeChunk |
-| `npm run knowledge:reset` | Delete managed knowledge docs/chunks (preserves legacy) |
-| `npm run knowledge:evaluate` | Retrieval eval: hit@1/3/5 against golden query set |
+| `npm run ingest` | Embed knowledge base into pgvector |
+| `npm run reset` | Full demo reset |
 | `npx tsx scripts/run-eval.ts --name <name>` | Run eval suite |
-| `npx tsx scripts/export-eval-data.ts` | Bootstrap EvalExample rows from approved runs |
 
 ---
 
 ## Optional Integrations
 
-All integrations fall back to mock adapters when env vars are absent — no code changes needed.
+All integrations fall back to mock adapters when env vars are absent.
 
 | Variable | Effect |
 |---|---|
-| `HUGGING_FACE_API_KEY` | Enables HF cross-encoder reranker (fallback: pgvector order) |
-| `SLACK_WEBHOOK_URL` | Slack notifications on approval (fallback: console.log) |
-| `SENTRY_AUTH_TOKEN` | Real Sentry error events in incident correlation (fallback: mock) |
-| `DATADOG_API_KEY` | Real Datadog log enrichment (fallback: mock logs) |
-| `ZENDESK_API_TOKEN` + `ZENDESK_SUBDOMAIN` | Zendesk ticket import webhook (fallback: mock) |
-| `GITHUB_TOKEN` + `GITHUB_ESCALATION_REPO` | Escalation agent creates GitHub Issues |
-| `JIRA_API_TOKEN` + `JIRA_BASE_URL` + `JIRA_PROJECT_KEY` | Escalation agent creates Jira tickets |
-| `DEVIN_API_KEY` | Automated bug reproduction and code fixes via Cognition AI (fallback: mock adapter) |
-| `DEVIN_DEFAULT_REPO` | Default repository URL for Devin tasks (e.g. `https://github.com/your-org/your-repo`) |
-| `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` | Required in production (default: `"local"` in dev) |
+| `DEVIN_API_KEY` | Autonomous bug reproduction and code fixes via Cognition AI |
+| `DEVIN_DEFAULT_REPO` | Default repository for Devin tasks |
+| `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` + `GITHUB_APP_INSTALLATION_ID` | Auto-create GitHub issues from tickets (GitHub App) |
+| `GITHUB_TOKEN` | GitHub issue creation fallback (PAT) |
+| `HUGGING_FACE_API_KEY` | HF cross-encoder reranker for RAG |
+| `SLACK_WEBHOOK_URL` | Slack notifications on approval |
+| `SENTRY_AUTH_TOKEN` | Real Sentry error events for incident correlation |
+| `DATADOG_API_KEY` | Real Datadog log enrichment |
+| `ZENDESK_API_TOKEN` + `ZENDESK_SUBDOMAIN` | Zendesk ticket import |
+| `JIRA_API_TOKEN` + `JIRA_BASE_URL` | Jira ticket creation on escalation |
+| `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` | Required in production |
 
 ---
 
@@ -857,3 +722,7 @@ The seed includes 7 tickets with predictable investigation outcomes:
 | TKT-005 | API key regional propagation delay | Billing logs + deploy_005 |
 | TKT-006 | Rate limiter burst counter bug | Rate limit logs + deploy_007 + inc_003 |
 | TKT-007 | Missing `SECRETS_MANAGER_KEY` in CI action v3.2.0 | Deployment logs + deploy_006 |
+
+---
+
+Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, Clerk, and Devin AI.
