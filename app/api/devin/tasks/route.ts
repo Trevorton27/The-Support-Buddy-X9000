@@ -28,6 +28,7 @@ export async function POST(request: Request) {
 
   const { mode, ticketId, investigationRunId, repositoryId } = parsed.data;
 
+  try {
   if (!ticketId && !investigationRunId) {
     return NextResponse.json({ error: "At least one of ticketId or investigationRunId is required" }, { status: 400 });
   }
@@ -192,6 +193,11 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ id: devinTask.id, workItemId: workItem.id, status: "queued" }, { status: 201 });
+  } catch (err) {
+    console.error("[POST /api/devin/tasks] Unhandled error:", err);
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function GET(request: Request) {
