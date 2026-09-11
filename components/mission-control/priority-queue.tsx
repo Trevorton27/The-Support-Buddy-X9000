@@ -17,6 +17,7 @@ const TYPE_FILTERS = [
   "APPROVAL",
   "INCIDENT_UPDATE",
   "INVESTIGATION",
+  "DEVIN_TASK",
   "INTERNAL_FOLLOW_UP",
   "SCHEDULED_CHECK",
   "DOCUMENTATION",
@@ -47,6 +48,41 @@ export function PriorityQueue({ items: initialItems }: PriorityQueueProps) {
     if (typeFilter !== "All" && item.type !== typeFilter) return false;
     return true;
   });
+
+  // Group items by ticketId so related work (investigation + Devin task) appear together
+  const grouped: { ticketId: string | null; items: WorkItemData[] }[] = [];
+  const ticketGroups = new Map<string, WorkItemData[]>();
+  const ungrouped: WorkItemData[] = [];
+
+  for (const item of filtered) {
+    if (item.ticketId) {
+      const existing = ticketGroups.get(item.ticketId);
+      if (existing) {
+        existing.push(item);
+      } else {
+        ticketGroups.set(item.ticketId, [item]);
+      }
+    } else {
+      ungrouped.push(item);
+    }
+  }
+
+  // Build ordered list: groups with multiple items get a visual container, singles render normally
+  const orderedItems: { group: boolean; ticketTitle?: string; items: WorkItemData[] }[] = [];
+  // Sort groups by highest priority item
+  const sortedGroups = [...ticketGroups.entries()].sort(
+    ([, a], [, b]) => Math.max(...b.map((i) => i.priorityScore)) - Math.max(...a.map((i) => i.priorityScore))
+  );
+  for (const [, groupItems] of sortedGroups) {
+    orderedItems.push({
+      group: groupItems.length > 1,
+      ticketTitle: groupItems[0].ticket?.title,
+      items: groupItems.sort((a, b) => b.priorityScore - a.priorityScore),
+    });
+  }
+  for (const item of ungrouped) {
+    orderedItems.push({ group: false, items: [item] });
+  }
 
   return (
     <div>
@@ -93,9 +129,20 @@ export function PriorityQueue({ items: initialItems }: PriorityQueueProps) {
             No work items match the current filters.
           </div>
         ) : (
-          filtered.map((item) => (
-            <WorkItemCard key={item.id} item={item} onUpdate={refresh} />
-          ))
+          orderedItems.map((entry, idx) =>
+            entry.group ? (
+              <div key={idx} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-2 space-y-2">
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 px-2 pt-1">
+                  Related work &mdash; {entry.ticketTitle}
+                </p>
+                {entry.items.map((item) => (
+                  <WorkItemCard key={item.id} item={item} onUpdate={refresh} />
+                ))}
+              </div>
+            ) : (
+              <WorkItemCard key={entry.items[0].id} item={entry.items[0]} onUpdate={refresh} />
+            )
+          )
         )}
       </div>
     </div>

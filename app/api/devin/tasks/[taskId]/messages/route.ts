@@ -1,27 +1,16 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth";
 import { getDevinAdapter } from "@/lib/integrations/devin";
 
-const messageSchema = z.object({
-  message: z.string().min(1).max(10000),
-});
-
-export async function POST(
-  request: Request,
+export async function GET(
+  _request: Request,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   const { orgId, response } = await requireOrgAuth();
   if (response) return response;
 
   const { taskId } = await params;
-
-  const body = await request.json();
-  const parsed = messageSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
 
   const task = await prisma.devinTask.findUnique({ where: { id: taskId } });
   if (!task) {
@@ -31,12 +20,23 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (!task.devinSessionId) {
-    return NextResponse.json({ error: "Session not yet created" }, { status: 400 });
+    return NextResponse.json({ messages: [], status: task.status });
   }
-  // Allow messages to finished/blocked sessions — Devin will resume
 
-  const adapter = getDevinAdapter();
-  await adapter.sendMessage(task.devinSessionId, parsed.data.message);
+  try {
+    const adapter = getDevinAdapter();
+    const session = await adapter.getSession(task.devinSessionId);
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      messages: session.messages,
+      status: task.status,
+      sessionStatus: session.status_enum,
+    });
+  } catch (err) {
+    console.error("[GET /api/devin/tasks/messages]", err);
+    return NextResponse.json(
+      { error: "Failed to fetch messages", messages: [] },
+      { status: 502 }
+    );
+  }
 }

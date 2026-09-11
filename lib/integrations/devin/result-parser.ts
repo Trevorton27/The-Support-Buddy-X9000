@@ -36,13 +36,13 @@ function isValidUrl(str: string): boolean {
   }
 }
 
-function scanMessagesForVerdict(messages: Array<{ content: string }>, mode: "reproduce" | "fix"): string | null {
+function scanMessagesForVerdict(messages: Array<{ message: string }>, mode: "reproduce" | "fix"): string | null {
   const validVerdicts = mode === "reproduce" ? REPRODUCTION_VERDICTS : FIX_VERDICTS;
   const lastMessages = messages.slice(-5);
 
   for (const msg of lastMessages.reverse()) {
     for (const verdict of validVerdicts) {
-      if (msg.content.includes(verdict)) {
+      if (msg.message.includes(verdict)) {
         return verdict;
       }
     }

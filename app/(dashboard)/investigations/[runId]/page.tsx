@@ -188,26 +188,28 @@ export default async function InvestigationRunPage({
           )}
 
           {/* Devin AI Actions */}
-          {(run.status === "complete" || run.status === "awaiting_approval") && (
+          {(run.status === "complete" || run.status === "awaiting_approval" || serializedDevinTasks.length > 0) && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Devin AI</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <ReproduceButton
-                    ticketId={run.ticketId}
-                    investigationRunId={run.id}
-                    hasActiveTask={hasActiveReproduction}
-                  />
-                  {run.approvalStatus === "approved" && (
-                    <FixButton
-                      investigationRunId={run.id}
+                {(run.status === "complete" || run.status === "awaiting_approval") && (
+                  <div className="flex flex-wrap gap-2">
+                    <ReproduceButton
                       ticketId={run.ticketId}
-                      hasActiveTask={hasActiveFix}
+                      investigationRunId={run.id}
+                      hasActiveTask={hasActiveReproduction}
                     />
-                  )}
-                </div>
+                    {run.approvalStatus === "approved" && (
+                      <FixButton
+                        investigationRunId={run.id}
+                        ticketId={run.ticketId}
+                        hasActiveTask={hasActiveFix}
+                      />
+                    )}
+                  </div>
+                )}
                 <DevinTasksSection tasks={serializedDevinTasks} />
               </CardContent>
             </Card>

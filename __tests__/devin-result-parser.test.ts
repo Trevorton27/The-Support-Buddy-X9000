@@ -57,7 +57,7 @@ describe("parseDevinResult", () => {
     const session = makeSession({
       structured_output: undefined,
       messages: [
-        { role: "devin", content: "I was able to REPRODUCED the issue by..." },
+        { type: "devin_message", message: "I was able to REPRODUCED the issue by..." },
       ],
     });
     const result = parseDevinResult(session, "reproduce");

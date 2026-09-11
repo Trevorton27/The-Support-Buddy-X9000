@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, ExternalLink, X, Send, Loader2 } from "lucide-react";
+import { Bot, ExternalLink, X, Loader2, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/utils";
+import { DevinChat } from "./devin-chat";
 
 export interface SerializedDevinTask {
   id: string;
@@ -22,12 +23,12 @@ export interface SerializedDevinTask {
   investigationRunId?: string | null;
 }
 
-const STATUS_STYLES: Record<string, { color: string; animate?: boolean }> = {
+const STATUS_STYLES: Record<string, { color: string; animate?: boolean; label?: string }> = {
   queued: { color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
   creating: { color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
   working: { color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", animate: true },
-  blocked: { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  waiting: { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+  blocked: { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", label: "waiting" },
+  waiting: { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", label: "waiting" },
   pr_ready: { color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
   finished: { color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
   failed: { color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
@@ -50,9 +51,7 @@ const TERMINAL = ["finished", "failed", "expired", "cancelled"];
 
 export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
   const [cancelling, setCancelling] = useState(false);
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [showMessage, setShowMessage] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [verdictExpanded, setVerdictExpanded] = useState(false);
 
   const statusStyle = STATUS_STYLES[task.status] ?? STATUS_STYLES.queued;
@@ -68,24 +67,6 @@ export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!message.trim()) return;
-    setSending(true);
-    try {
-      await fetch(`/api/devin/tasks/${task.id}/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      setMessage("");
-      setShowMessage(false);
-    } catch {
-      // ignore
-    } finally {
-      setSending(false);
-    }
-  };
-
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 bg-white dark:bg-slate-900">
       <div className="flex items-center gap-2 flex-wrap">
@@ -95,7 +76,7 @@ export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
         </Badge>
         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusStyle.color}`}>
           {statusStyle.animate && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse mr-1" />}
-          {task.status}
+          {statusStyle.label ?? task.status}
         </Badge>
         {task.startedAt && (
           <span className="text-[10px] text-slate-400">
@@ -145,47 +126,39 @@ export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
             rel="noopener noreferrer"
             className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
           >
-            Devin session
+            View Chat On Devin
           </a>
         )}
 
+        <Button
+          size="sm"
+          variant={showChat ? "default" : "outline"}
+          className="h-5 px-2 text-[10px]"
+          onClick={() => setShowChat(!showChat)}
+        >
+          <MessageCircle className="w-3 h-3 mr-1" />
+          {showChat ? "Hide chat" : "Chat"}
+        </Button>
+
         {!isTerminal && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-5 px-1.5 text-[10px]"
-              onClick={() => setShowMessage(!showMessage)}
-            >
-              <Send className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-5 px-1.5 text-[10px] text-red-600 hover:text-red-700"
-              onClick={handleCancel}
-              disabled={cancelling}
-            >
-              {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-            </Button>
-          </>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-5 px-1.5 text-[10px] text-red-600 hover:text-red-700"
+            onClick={handleCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+          </Button>
         )}
       </div>
 
-      {showMessage && !isTerminal && (
-        <div className="flex gap-1">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-            placeholder="Send message to Devin..."
-            className="flex-1 text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
-          />
-          <Button size="sm" className="h-6 px-2" onClick={handleSendMessage} disabled={sending || !message.trim()}>
-            {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-          </Button>
-        </div>
+      {showChat && (
+        <DevinChat
+          taskId={task.id}
+          taskStatus={task.status}
+          sessionUrl={task.sessionUrl}
+        />
       )}
     </div>
   );

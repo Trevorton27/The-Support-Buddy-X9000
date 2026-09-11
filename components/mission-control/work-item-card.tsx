@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   MessageSquare, ArrowUpRight, Search, Shield, AlertTriangle,
-  Clock, FileText, CheckSquare, ChevronDown, ChevronUp
+  Clock, FileText, CheckSquare, ChevronDown, ChevronUp, Bot
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { WorkItemActions } from "./work-item-actions";
@@ -22,6 +22,7 @@ const TYPE_ICONS: Record<string, typeof MessageSquare> = {
   SCHEDULED_CHECK: Clock,
   DOCUMENTATION: FileText,
   MANUAL_TASK: CheckSquare,
+  DEVIN_TASK: Bot,
 };
 
 const BAND_STYLES: Record<string, { border: string; badge: string }> = {
@@ -76,6 +77,9 @@ export function WorkItemCard({ item, onUpdate }: WorkItemCardProps) {
               </h3>
               <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${styles.badge}`}>
                 {item.priorityBand}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-slate-500 dark:text-slate-400">
+                {item.type.replace(/_/g, " ")}
               </Badge>
               <span className="text-[10px] text-slate-400">{Math.round(item.priorityScore)}/100</span>
               {item.confidence !== null && item.confidence < 0.6 && (

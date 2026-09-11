@@ -44,8 +44,8 @@ export class MockDevinAdapter implements IDevinAdapter {
       status_enum: "working",
       title: "Mock Devin session",
       messages: [
-        { role: "user", content: "Investigating issue..." },
-        { role: "devin", content: "I'm working on reproducing the issue." },
+        { type: "initial_user_message", message: "Investigating issue...", timestamp: new Date(Date.now() - 300000).toISOString(), username: "Support Buddy" },
+        { type: "devin_message", message: "I'm working on reproducing the issue.", timestamp: new Date(Date.now() - 240000).toISOString() },
       ],
       tags: ["mock"],
       created_at: new Date(Date.now() - 300000).toISOString(),
@@ -74,10 +74,11 @@ export class MockDevinAdapter implements IDevinAdapter {
         base.pull_request = { url: "https://github.com/mock-org/mock-repo/pull/42" };
       }
       base.messages.push({
-        role: "devin",
-        content: isFixMode
+        type: "devin_message",
+        message: isFixMode
           ? "Fix implemented and PR opened."
           : "I've successfully reproduced the issue.",
+        timestamp: new Date().toISOString(),
       });
     }
 

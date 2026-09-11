@@ -27,9 +27,13 @@ export type DevinInternalStatus =
   | "cancelled";
 
 export interface DevinMessage {
-  role: "user" | "devin";
-  content: string;
+  type: string;        // "initial_user_message" | "user_message" | "devin_message" | etc.
+  message: string;
   timestamp?: string;
+  username?: string | null;
+  event_id?: string;
+  origin?: string | null;
+  user_id?: string | null;
 }
 
 export interface DevinSession {

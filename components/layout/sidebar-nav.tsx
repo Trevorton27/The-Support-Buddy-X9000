@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Ticket, Search, Settings, ClipboardCheck,
   AlertTriangle, FlaskConical, Users, ShieldCheck, BookOpen, Wand2,
-  GraduationCap, Target, Bug, Bot, type LucideIcon,
+  GraduationCap, Target, Bug, Bot, BrainCircuit, type LucideIcon,
 } from "lucide-react";
 
 // ─── Nav Configuration ───
@@ -70,6 +70,13 @@ const navItems: NavItem[] = [
     label: "Knowledge Base",
     icon: BookOpen,
     preview: "RAG-indexed documentation that agents use for evidence-based responses",
+    group: "operations",
+  },
+  {
+    href: "/about-agents",
+    label: "About Agents",
+    icon: BrainCircuit,
+    preview: "Learn how each agent in the investigation pipeline works to troubleshoot and triage support tickets",
     group: "operations",
   },
   {

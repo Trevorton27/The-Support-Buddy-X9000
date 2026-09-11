@@ -130,7 +130,7 @@ export function InvestigationPanel({ ticket, latestRun }: InvestigationPanelProp
           size="sm"
         >
           <Play className="w-3.5 h-3.5 mr-1.5" />
-          {running ? "Starting..." : "Run Investigation"}
+          {running ? "Starting..." : latestRun ? "Run New Investigation" : "Run Investigation"}
         </Button>
       </CardContent>
     </Card>
