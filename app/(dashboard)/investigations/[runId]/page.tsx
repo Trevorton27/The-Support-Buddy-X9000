@@ -15,6 +15,8 @@ import { FixButton } from "@/components/devin/fix-button";
 import { DevinTasksSection } from "@/components/devin/devin-tasks-section";
 import type { SerializedDevinTask } from "@/components/devin/devin-task-card";
 import { InvestigationActions } from "@/components/agents/investigation-actions";
+import type { TokenUsage } from "@/lib/agent-utils";
+import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -63,6 +65,32 @@ export default async function InvestigationRunPage({
   const hypotheses = (run.hypotheses as unknown as Hypothesis[]) ?? [];
   const guardrailsResult = run.guardrailsResult as unknown as GuardrailsResult | null;
 
+  // Aggregate token usage across all steps
+  const MODEL_FOR_AGENT: Record<string, string> = {
+    intake: "gpt-4o-mini",
+    "log-analysis": "gpt-4o-mini",
+    "knowledge-retrieval": "gpt-4o-mini",
+    guardrails: "gpt-4o-mini",
+    "root-cause": "gpt-4o",
+    "response-drafting": "gpt-4o",
+    escalation: "gpt-4o",
+  };
+
+  const totalUsage = run.steps.reduce(
+    (acc, step) => {
+      const usage = step.tokenUsage as unknown as TokenUsage | null;
+      if (!usage) return acc;
+      const model = MODEL_FOR_AGENT[step.agentName] ?? "gpt-4o-mini";
+      return {
+        promptTokens: acc.promptTokens + usage.promptTokens,
+        completionTokens: acc.completionTokens + usage.completionTokens,
+        totalTokens: acc.totalTokens + usage.totalTokens,
+        totalCost: acc.totalCost + estimateCostUsd(usage, model),
+      };
+    },
+    { promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 }
+  );
+
   // Effective reply: human-edited takes precedence over AI draft
   const effectiveReply = run.editedReply || run.summary;
 
@@ -99,6 +127,11 @@ export default async function InvestigationRunPage({
             <span>•</span>
             <span>{formatRelativeTime(run.startedAt)}</span>
             {duration && <span>• {formatDuration(duration)}</span>}
+            {totalUsage.totalTokens > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full border border-slate-200 dark:border-slate-700 font-mono tabular-nums">
+                {(totalUsage.totalTokens / 1000).toFixed(1)}k tokens · {formatCostUsd(totalUsage.totalCost)}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
