@@ -127,6 +127,9 @@ export async function POST(request: Request) {
       description: ticket.description,
       severity: ticket.severity,
       category: ticket.category,
+      id: ticket.id,
+      githubIssueNumber: ticket.githubIssueNumber,
+      githubIssueUrl: ticket.githubIssueUrl,
     },
     customer: {
       name: ticket.customer.name,
