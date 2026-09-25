@@ -13,6 +13,7 @@ When a support ticket arrives, a LangGraph-orchestrated pipeline of 9 specialize
 - [Agentic AI Architecture](#agentic-ai-architecture)
 - [Devin AI Integration](#devin-ai-integration)
 - [Demo Lab](#demo-lab)
+  - [How to Create a Demo Event and Run an Investigation](#how-to-create-a-demo-event-and-run-an-investigation)
 - [Screenshots](#screenshots)
 - [Tech Stack](#tech-stack)
 - [End-to-End Walkthrough](#end-to-end-walkthrough)
@@ -196,6 +197,50 @@ A guided flow for creating AI-authored bugs:
 3. **Set difficulty** (easy / medium / hard)
 4. **Add guidance** (optional natural language instructions)
 5. **Confirm and dispatch** to Devin
+
+### How to Create a Demo Event and Run an Investigation
+
+There are three ways to inject a defect and trigger the full investigation pipeline:
+
+#### Option 1: One-Click Full Demo (Recommended)
+
+1. Navigate to `/demo-lab`
+2. Find a scenario card with status **Available**
+3. Click **"Run Entire Demo"** — this fires a single Inngest event (`demo-lab/run.requested`) that orchestrates everything automatically:
+   - Injects the defect patch into a git branch on the demo product repo
+   - Creates a support ticket from the scenario's template
+   - Runs the full 9-agent investigation pipeline
+   - Waits for your HITL approval (up to 72h)
+   - Dispatches Devin to reproduce the bug
+   - Dispatches Devin to fix the bug and open a PR
+   - Reverts the demo product to a clean state when done
+4. Monitor progress on the scenario card — status transitions through `Broken → Ticket Open → Investigating → Awaiting Approval → Devin Reproducing → Devin Fixing → PR Ready → Fixed`
+5. When it reaches **Awaiting Approval**, go to `/approvals` to review and approve
+
+#### Option 2: Step-by-Step Manual Flow
+
+1. **Activate a scenario**: On `/demo-lab`, click **"Activate Issue"** on any available scenario. This injects the defect into a feature branch on the demo product repo
+2. **Create the ticket**: Click **"Create Ticket"** on the now-broken scenario. This creates a support ticket using the scenario's template and fires a `ticket/created` event (which also auto-creates a GitHub issue)
+3. **Run the investigation**: Go to `/tickets`, open the new ticket, and click **"Run Investigation"**. Watch the agents work in real time at `/investigations/[runId]`
+4. **Approve**: Once the investigation reaches `awaiting_approval`, go to `/approvals/[runId]`. Edit the draft reply if needed, add reviewer notes, then approve
+5. **Reproduce with Devin**: Back on the investigation page, click **"Reproduce with Devin"**. Monitor the session at `/devin`
+6. **Fix with Devin**: After approval, click **"Send to Devin (Fix)"**. Devin creates a branch and opens a PR on the demo product repo
+7. **Reset**: Click **"Reset"** on the scenario card to revert the demo product and make the scenario available again
+
+#### Option 3: Generate a New Scenario
+
+To create an entirely new defect (not from the pre-built seeds):
+
+- **Mutate an existing scenario**: Click **"Mutate"** on any scenario card. GPT-4o generates a novel variation of the bug with a new patch, ticket template, and verification gate
+- **Author with Devin**: Click **"Author Defect"** in the Demo Lab header. A multi-step wizard lets you choose a service, defect class (off-by-one, race condition, etc.), difficulty, and optional guidance. Devin then creates the bug, a regression test, and a scenario manifest in the demo product repo
+- **Generate via dialog**: Click **"Generate Scenario"** to create a new scenario template via LLM
+
+#### Prerequisites
+
+- Inngest must be running: `npx inngest-cli@latest dev -u http://localhost:3000/api/webhooks/inngest`
+- For real Devin sessions: set `DEVIN_API_KEY` in `.env.local` (without it, the mock adapter simulates sessions)
+- For GitHub issue sync: configure GitHub App credentials or set `GITHUB_TOKEN`
+- The demo product repo (`Trevorton27/support-buddy-demo-product`) must be cloned locally for defect injection, and accessible to Devin for reproduce/fix tasks
 
 ---
 

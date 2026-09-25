@@ -9,6 +9,7 @@ const logger = createLogger("demo-lab-lifecycle");
 
 // Valid status transitions
 const TRANSITIONS: Record<string, string[]> = {
+  pending: ["activating", "broken", "failed", "completed"],
   available: ["activating"],
   activating: ["broken", "failed"],
   broken: ["ticket_open", "resetting", "failed"],
