@@ -68,7 +68,7 @@ Ticket submitted
 [Escalation Agent] --> internal notes, optional GitHub/Jira issue
 ```
 
-Every agent creates an auditable `AgentStep` record with token usage, timing, tools called, and confidence scores — viewable in the real-time investigation trace.
+Every agent creates an auditable `AgentStep` record with token usage, timing, tools called, and confidence scores — viewable in the real-time investigation trace. A total token usage badge on the investigation detail page aggregates usage and estimated cost across all agent steps.
 
 ### Layer 2: Devin AI (Autonomous Coding Agent)
 
@@ -139,6 +139,15 @@ A dedicated monitoring page with:
 - **Expandable task rows**: Status badges, verdict, session links, PR links, message/cancel actions
 
 ![Devin Task with PR](docs/screenshots/devin-fix-pr.png)
+
+### PR Traceability
+
+Devin PRs are automatically linked back to their originating support ticket:
+
+- **Branch name**: `fix/<ticketId>-<slugified-title>` (e.g. `fix/cmugtskq-billing-api-key-rotation`)
+- **PR title**: `fix: [<ticketId>] <ticket subject>` (e.g. `fix: [cmugtskq] Billing API key rotation causing auth failures`)
+- **PR body**: includes `Ticket: <ticketId>` reference and `Closes #<githubIssueNumber>` to auto-close the linked GitHub issue on merge
+- Both reproduce and fix prompts include the ticket ID and GitHub issue number in the evidence context
 
 ### Security
 
@@ -237,10 +246,10 @@ To create an entirely new defect (not from the pre-built seeds):
 
 #### Prerequisites
 
-- Inngest must be running: `npx inngest-cli@latest dev -u http://localhost:3000/api/webhooks/inngest`
+- Inngest must be running: `npx inngest-cli@latest dev -u http://localhost:3000/api/webhooks/inngest` (local) or Inngest Cloud with correct `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` (production)
 - For real Devin sessions: set `DEVIN_API_KEY` in `.env.local` (without it, the mock adapter simulates sessions)
 - For GitHub issue sync: configure GitHub App credentials or set `GITHUB_TOKEN`
-- The demo product repo (`Trevorton27/support-buddy-demo-product`) must be cloned locally for defect injection, and accessible to Devin for reproduce/fix tasks
+- Defect injection works two ways: locally if the demo product repo is cloned at `../support-buddy-demo-product` (or `DEMO_PRODUCT_REPO_PATH`), or remotely via the GitHub API using `GITHUB_TOKEN` (required for Vercel deployments)
 
 ---
 
@@ -249,7 +258,7 @@ To create an entirely new defect (not from the pre-built seeds):
 | View | Description |
 |------|-------------|
 | ![Dashboard](docs/screenshots/dashboard-overview.png) | **Dashboard** — KPI overview with ticket volume, resolution times, and agent performance |
-| ![Investigation](docs/screenshots/investigation-pipeline.png) | **Investigation Pipeline** — Real-time agent trace with clickable steps, token usage, timing bar, and evidence panel |
+| ![Investigation](docs/screenshots/investigation-pipeline.png) | **Investigation Pipeline** — Real-time agent trace with clickable steps, per-step and total token usage, timing bar, and evidence panel |
 | ![Devin Dashboard](docs/screenshots/devin-dashboard.png) | **Devin AI Dashboard** — Monitor all Devin sessions with stats, filters, and expandable task details |
 | ![Approval Queue](docs/screenshots/approval-queue.png) | **Approval Queue** — HITL review with SLA timers, customer tier badges, and draft editor |
 | ![Mission Control](docs/screenshots/mission-control.png) | **Mission Control** — AI-prioritized work queue with shift briefings and responsibility tracking |
@@ -263,7 +272,7 @@ To create an entirely new defect (not from the pre-built seeds):
 | Layer | Technology |
 |---|---|
 | Framework | Next.js 15 (App Router, React 19) |
-| Auth | Clerk (`@clerk/nextjs` v6) with Organizations |
+| Auth | Better Auth (self-hosted, `better-auth`) with Organizations |
 | Agent orchestration | LangGraph.js (`@langchain/langgraph`) |
 | Autonomous coding | Devin AI (Cognition) |
 | LLM | OpenAI `gpt-4o` (reasoning), `gpt-4o-mini` (classification / guardrails / eval) |
@@ -279,11 +288,11 @@ To create an entirely new defect (not from the pre-built seeds):
 
 ## End-to-End Walkthrough
 
-1. **Sign in** -- redirected to `/dashboard` (KPI overview)
+1. **Sign in** -- email + password with visibility toggle, redirected to `/dashboard` (KPI overview)
 2. **Browse tickets** at `/tickets` -- pre-seeded support tickets with customer context
 3. **Click any ticket** -- view detail, customer history, knowledge context panel
 4. **Run Investigation** -- fires background agent pipeline via Inngest
-5. **Watch agents work** at `/investigations/[runId]` -- real-time step updates (2s polling), token usage, timing bar, evidence panel, guardrails badge
+5. **Watch agents work** at `/investigations/[runId]` -- real-time step updates (2s polling), per-step and total token usage with cost estimates, timing bar, evidence panel, guardrails badge
 6. **Review at `/approvals`** -- investigation reaches `awaiting_approval` with SLA timer
 7. **Approve or reject** -- edit draft reply, add reviewer notes, one-click approve/reject
 8. **Reproduce with Devin** -- click on investigation to dispatch Devin for bug reproduction
@@ -664,7 +673,6 @@ inngest/
 - Node.js 20+
 - Docker (for local Postgres + pgvector)
 - OpenAI API key
-- Clerk account
 
 ### Quick Start
 
@@ -676,7 +684,7 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env.local
-# Fill in DATABASE_URL, OPENAI_API_KEY, CLERK keys
+# Fill in DATABASE_URL, OPENAI_API_KEY, BETTER_AUTH_SECRET
 
 # 3. Start local database
 docker compose up -d
@@ -688,7 +696,7 @@ npm run ingest
 npm run knowledge:ingest
 
 # 5. Start Inngest dev server (separate terminal)
-npx inngest-cli@latest dev
+npx inngest-cli@latest dev -u http://localhost:3000/api/webhooks/inngest
 
 # 6. Start the app
 npm run dev
@@ -770,4 +778,4 @@ The seed includes 7 tickets with predictable investigation outcomes:
 
 ---
 
-Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, Clerk, and Devin AI.
+Built with Next.js 15, LangGraph.js, Inngest, Prisma + pgvector, Better Auth, and Devin AI.
