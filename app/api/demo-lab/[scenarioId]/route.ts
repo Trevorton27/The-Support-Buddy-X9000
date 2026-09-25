@@ -3,9 +3,12 @@ import { z } from "zod";
 import { requireOrgAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { createDemoRun, transitionRun, resetScenario, getScenarioWithLatestRun } from "@/lib/demo-lab/lifecycle";
-import { injectBug, fixBug } from "@/lib/bug-generator/generator";
+import { injectBug, fixBug, getDemoRepoPath, getTemplate } from "@/lib/bug-generator/generator";
+import { injectDefectOnBranch, deleteBranch } from "@/lib/demo-lab/git-ops";
 import { inngest } from "@/inngest/client";
 import { createLogger } from "@/lib/logger";
+
+const DEMO_REPO = process.env.DEMO_PRODUCT_REPO ?? "Trevorton27/support-buddy-demo-product";
 
 const logger = createLogger("demo-lab-api");
 
@@ -62,17 +65,40 @@ export async function POST(
   try {
     switch (action) {
       case "activate": {
-        // Create run, inject defect locally
+        // Create run, inject defect
         const run = await createDemoRun(scenarioId, userId!, orgId ?? "");
+        const template = getTemplate(scenario.key);
         const defect = scenario.defectPatch as { buggyCode: string; fixedCode: string; filePath: string; testFilePath: string; testCode: string } | null;
-        if (defect) {
+
+        // Try local filesystem first, fall back to GitHub API
+        const localRepo = getDemoRepoPath();
+        if (localRepo) {
           const result = injectBug(scenario.key);
           if (!result.success) {
             await transitionRun(run.id, "failed", result.error);
             return NextResponse.json({ error: result.error }, { status: 500 });
           }
+          await transitionRun(run.id, "broken", "Defect injected locally");
+        } else if (template && defect) {
+          try {
+            await injectDefectOnBranch(DEMO_REPO, "main", run.branch!, {
+              filePath: template.filePath,
+              fixedCode: template.fixedCode,
+              buggyCode: template.buggyCode,
+              testFilePath: template.testFilePath,
+              testCode: template.testCode,
+            });
+            await transitionRun(run.id, "broken", `Defect injected on branch ${run.branch}`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "GitHub API defect injection failed";
+            await transitionRun(run.id, "failed", msg);
+            return NextResponse.json({ error: msg }, { status: 500 });
+          }
+        } else {
+          await transitionRun(run.id, "failed", "No defect patch or template found for this scenario");
+          return NextResponse.json({ error: "No defect patch or template found" }, { status: 500 });
         }
-        await transitionRun(run.id, "broken", "Defect injected locally");
+
         return NextResponse.json({ runId: run.id, status: "broken" });
       }
 
@@ -156,8 +182,18 @@ export async function POST(
       }
 
       case "reset": {
-        // Revert the bug locally
-        fixBug(scenario.key);
+        // Revert the bug: local filesystem or GitHub branch cleanup
+        const localRepoPath = getDemoRepoPath();
+        if (localRepoPath) {
+          fixBug(scenario.key);
+        } else if (scenario.activeBranch) {
+          try {
+            await deleteBranch(DEMO_REPO, scenario.activeBranch);
+          } catch (err) {
+            logger.warn("Failed to delete branch during reset", { branch: scenario.activeBranch, error: String(err) });
+          }
+        }
+
         await resetScenario(scenarioId);
 
         // Mark any active runs as completed
@@ -167,8 +203,8 @@ export async function POST(
             status: { notIn: ["completed", "failed"] },
           },
         });
-        for (const run of activeRuns) {
-          await transitionRun(run.id, "completed", "Reset by user");
+        for (const runToReset of activeRuns) {
+          await transitionRun(runToReset.id, "completed", "Reset by user");
         }
 
         return NextResponse.json({ status: "available" });
