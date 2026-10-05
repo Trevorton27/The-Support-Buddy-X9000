@@ -31,6 +31,12 @@ export function isJevOpsEnabled(): boolean {
   );
 }
 
+export interface JevOpsQuestion {
+  type: "noul" | "choice" | "score";
+  instructions: string;
+  criteria?: Record<string, string> | string[];
+}
+
 export interface EvaluateParams {
   agentId: string;
   actionType: string;
@@ -38,6 +44,7 @@ export interface EvaluateParams {
   objective?: string;
   state?: Record<string, unknown>;
   evidence?: Record<string, unknown>;
+  questions?: Record<string, JevOpsQuestion>; // omit to use JevOps's default questions
   correlationId?: string;
   idempotencyKey?: string;
 }
@@ -66,6 +73,7 @@ export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDeci
         objective: params.objective,
         state: params.state || {},
         evidence: params.evidence || {},
+        questions: params.questions,
         idempotency_key: params.idempotencyKey,
         environment: process.env.NODE_ENV === "production" ? "live" : "test",
       }),

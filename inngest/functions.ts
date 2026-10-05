@@ -18,6 +18,8 @@ import { transitionRun } from "@/lib/demo-lab/lifecycle";
 import { injectBug, fixBug } from "@/lib/bug-generator/generator";
 import { processDefectManifest } from "@/lib/demo-lab/defect-author";
 import { syncTicketToGitHub } from "@/lib/github-sync";
+import { evaluateDevinOutput } from "@/lib/integrations/jevops/devin-review";
+import type { DevinSession } from "@/lib/integrations/devin/types";
 
 const logger = createLogger("inngest-function");
 
@@ -743,17 +745,7 @@ export const pollDevinTaskFunction = inngest.createFunction(
           },
         });
       } else {
-        const parsed = parseDevinResult(session, task.mode as "reproduce" | "fix");
-        await prisma.devinTask.update({
-          where: { id: devinTaskId },
-          data: {
-            verdict: parsed.verdict,
-            verdictReason: parsed.verdictReason,
-            pullRequestUrl: parsed.pullRequestUrl ?? task.pullRequestUrl,
-            structuredResult: JSON.parse(JSON.stringify(parsed)),
-            status: task.status === "working" ? "finished" : task.status,
-          },
-        });
+        await applyParsedDevinResult(devinTaskId, session);
       }
 
       // Complete WorkItem
@@ -767,7 +759,13 @@ export const pollDevinTaskFunction = inngest.createFunction(
       }
     });
 
-    // Step 4: For defect_author tasks, create scenario from manifest
+    // Step 4: JevOps review of fix PRs (no-op for other modes or when JevOps is off)
+    await step.run("jev-review", async () => {
+      const review = await evaluateDevinOutput(devinTaskId);
+      return review ? { disposition: review.disposition } : null;
+    });
+
+    // Step 5: For defect_author tasks, create scenario from manifest
     await step.run("process-defect-manifest", async () => {
       const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
       if (task.mode !== "defect_author" || task.status !== "finished") return;
@@ -787,6 +785,102 @@ export const pollDevinTaskFunction = inngest.createFunction(
     });
 
     return { devinTaskId };
+  }
+);
+
+async function applyParsedDevinResult(devinTaskId: string, session: DevinSession): Promise<void> {
+  const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+  const parsed = parseDevinResult(session, task.mode as "reproduce" | "fix");
+  await prisma.devinTask.update({
+    where: { id: devinTaskId },
+    data: {
+      verdict: parsed.verdict,
+      verdictReason: parsed.verdictReason,
+      pullRequestUrl: parsed.pullRequestUrl ?? task.pullRequestUrl,
+      structuredResult: JSON.parse(JSON.stringify(parsed)),
+      status: task.status === "working" ? "finished" : task.status,
+    },
+  });
+}
+
+// ─── Devin AI: Resume polling after Jev feedback was sent back to Devin ───
+
+export const pollResumedDevinTaskFunction = inngest.createFunction(
+  {
+    id: "poll-resumed-devin-task",
+    name: "Poll Resumed Devin Task (Jev feedback)",
+    retries: 2,
+    timeouts: { finish: "3h" },
+  },
+  { event: "devin/task.resumed" },
+  async ({ event, step }) => {
+    const { devinTaskId } = event.data as { devinTaskId: string };
+    const DEVIN_TERMINAL = ["finished", "failed", "expired"];
+
+    // Right after a message, the session can still report its old terminal state. Only finalize
+    // once Devin has actually resumed, so the next review sees new output rather than the old one.
+    let resumed = false;
+    let finished = false;
+    for (let i = 0; i < 120; i++) {
+      await step.sleep(`resume-wait-${i}`, "1m");
+
+      const poll = await step.run(`resume-poll-${i}`, async () => {
+        const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+        if (task.status === "cancelled" || !task.devinSessionId) return { cancelled: true, active: false, terminal: false };
+
+        const session = await getDevinAdapter().getSession(task.devinSessionId);
+        const internalStatus = mapDevinStatusToInternal(session.status_enum, session);
+        const terminal = DEVIN_TERMINAL.includes(internalStatus);
+        if (terminal && !resumed) return { cancelled: false, active: false, terminal: true };
+
+        await prisma.devinTask.update({
+          where: { id: devinTaskId },
+          data: {
+            status: internalStatus,
+            pullRequestUrl: session.pull_request?.url ?? task.pullRequestUrl,
+            pollCount: { increment: 1 },
+            lastPolledAt: new Date(),
+            ...(terminal ? { completedAt: new Date() } : {}),
+          },
+        });
+        return { cancelled: false, active: !terminal, terminal };
+      });
+
+      if (poll.cancelled) return { devinTaskId, status: "cancelled" };
+      if (poll.active) resumed = true;
+      if (poll.terminal && resumed) {
+        finished = true;
+        break;
+      }
+    }
+
+    if (!finished) {
+      // Devin never resumed (or ran past the window): restore its real status, skip the re-review
+      await step.run("restore-status", async () => {
+        const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+        if (!task.devinSessionId) return;
+        const session = await getDevinAdapter().getSession(task.devinSessionId);
+        await prisma.devinTask.update({
+          where: { id: devinTaskId },
+          data: { status: mapDevinStatusToInternal(session.status_enum, session) },
+        });
+      });
+      logger.warn("Devin did not finish after Jev feedback; skipping re-review", { devinTaskId, resumed });
+      return { devinTaskId, status: resumed ? "timeout" : "not_resumed" };
+    }
+
+    await step.run("finalize", async () => {
+      const task = await prisma.devinTask.findUniqueOrThrow({ where: { id: devinTaskId } });
+      const session = await getDevinAdapter().getSession(task.devinSessionId!);
+      await applyParsedDevinResult(devinTaskId, session);
+    });
+
+    const review = await step.run("jev-review", async () => {
+      const r = await evaluateDevinOutput(devinTaskId);
+      return r ? { disposition: r.disposition, round: r.round } : null;
+    });
+
+    return { devinTaskId, review };
   }
 );
 

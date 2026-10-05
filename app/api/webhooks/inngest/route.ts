@@ -12,6 +12,7 @@ import {
   generateShiftBriefingFunction,
   detectStaleResponsibilitiesFunction,
   pollDevinTaskFunction,
+  pollResumedDevinTaskFunction,
   runDemoScenarioFunction,
 } from "@/inngest/functions";
 
@@ -29,6 +30,7 @@ export const { GET, POST, PUT } = serve({
     generateShiftBriefingFunction,
     detectStaleResponsibilitiesFunction,
     pollDevinTaskFunction,
+    pollResumedDevinTaskFunction,
     runDemoScenarioFunction,
   ],
 });

@@ -79,3 +79,55 @@ describe("DevinTaskCard", () => {
     expect(screen.getByText("Fix")).toBeDefined();
   });
 });
+
+describe("DevinTaskCard — Jev review", () => {
+  const review = {
+    decisionId: "dec-1",
+    round: 0,
+    jevDisposition: "allow",
+    disposition: "block",
+    overrides: ["Touches sensitive paths without test evidence: src/auth/session.ts"],
+    judgments: [
+      { question_key: "tests_credible", question_type: "noul", value: 0.31, confidence: null },
+      { question_key: "risk_level", question_type: "score", value: 7, confidence: 0.6 },
+    ],
+    matchedRule: null,
+    providerError: null,
+    evaluatedAt: "2026-10-05T00:00:00.000Z",
+  };
+
+  it("renders no review card when there is no review", () => {
+    render(<DevinTaskCard task={makeTask({ mode: "fix", status: "finished" })} />);
+    expect(screen.queryByText("Jev review of Devin output")).toBeNull();
+  });
+
+  it("renders disposition, policy override, judgments and send-back for a finished fix", () => {
+    render(
+      <DevinTaskCard
+        task={makeTask({ mode: "fix", status: "finished", pullRequestUrl: "https://github.com/o/r/pull/1", jevopsReview: review, jevopsReviewRound: 0 })}
+      />
+    );
+    expect(screen.getByText("Jev review of Devin output")).toBeDefined();
+    expect(screen.getByText("Do not merge")).toBeDefined();
+    expect(screen.getByText(/src\/auth\/session\.ts/)).toBeDefined();
+    expect(screen.getByText("Tests credible")).toBeDefined();
+    expect(screen.getByText("7.0/10")).toBeDefined();
+    expect(screen.getByRole("button", { name: /Send back to Devin/ })).toBeDefined();
+  });
+
+  it("hides send-back while waiting for the re-review", () => {
+    render(
+      <DevinTaskCard task={makeTask({ mode: "fix", status: "working", jevopsReview: review, jevopsReviewRound: 1 })} />
+    );
+    expect(screen.getByText(/Jev will re-review when Devin finishes/)).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Send back to Devin/ })).toBeNull();
+  });
+
+  it("shows the limit message once feedback rounds are used up", () => {
+    render(
+      <DevinTaskCard task={makeTask({ mode: "fix", status: "finished", jevopsReview: { ...review, round: 2 }, jevopsReviewRound: 2 })} />
+    );
+    expect(screen.getByText(/Feedback limit reached/)).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Send back to Devin/ })).toBeNull();
+  });
+});

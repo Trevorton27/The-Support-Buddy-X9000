@@ -9,6 +9,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { transitionRun } from "@/lib/demo-lab/lifecycle";
+import { recordDevinPrOutcome } from "@/lib/integrations/jevops/devin-review";
 
 const logger = createLogger("webhook-github");
 
@@ -126,6 +127,16 @@ async function handlePullRequest(event: GitHubPullRequestEvent): Promise<{ proce
   const pr = event.pull_request;
   const headBranch = pr.head.ref;
 
+  // Ground truth for JevOps calibration of Devin reviews
+  let outcomeRecorded = false;
+  if (event.action === "closed") {
+    try {
+      outcomeRecorded = await recordDevinPrOutcome(pr.html_url, pr.merged, pr.number);
+    } catch (err) {
+      logger.error("Failed to record Devin PR outcome in JevOps", { prNumber: pr.number, error: String(err) });
+    }
+  }
+
   // Check if this PR's head branch matches a demo run
   const run = await prisma.demoRun.findFirst({
     where: {
@@ -144,6 +155,9 @@ async function handlePullRequest(event: GitHubPullRequestEvent): Promise<{ proce
   });
 
   if (!run && !devinTask) {
+    if (outcomeRecorded) {
+      return { processed: true, detail: `PR #${pr.number} outcome recorded in JevOps` };
+    }
     return { processed: false, detail: `PR not linked to any demo run or Devin task` };
   }
 

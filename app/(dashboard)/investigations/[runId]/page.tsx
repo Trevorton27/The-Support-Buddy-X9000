@@ -14,6 +14,7 @@ import { ReproduceButton } from "@/components/devin/reproduce-button";
 import { FixButton } from "@/components/devin/fix-button";
 import { DevinTasksSection } from "@/components/devin/devin-tasks-section";
 import type { SerializedDevinTask } from "@/components/devin/devin-task-card";
+import type { DevinJevReview } from "@/lib/integrations/jevops/devin-review-shared";
 import { InvestigationActions } from "@/components/agents/investigation-actions";
 import type { TokenUsage } from "@/lib/agent-utils";
 import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
@@ -33,6 +34,7 @@ async function getRun(runId: string) {
           id: true, mode: true, status: true, verdict: true, verdictReason: true,
           pullRequestUrl: true, repository: true, devinSessionId: true, sessionUrl: true,
           startedAt: true, updatedAt: true, ticketId: true, investigationRunId: true,
+          jevopsReview: true, jevopsReviewRound: true,
         },
       },
     },
@@ -112,6 +114,7 @@ export default async function InvestigationRunPage({
     ...t,
     startedAt: t.startedAt?.toISOString() ?? null,
     updatedAt: t.updatedAt.toISOString(),
+    jevopsReview: t.jevopsReview as unknown as DevinJevReview | null,
   }));
 
   return (

@@ -462,6 +462,8 @@ All calls go to `JEVOPS_API_URL` with the `X-API-Key: $JEVOPS_API_KEY` header, f
 | `POST /v1/decisions/evaluate` | Every investigation, during guardrails | `agents/nodes/guardrails-agent.ts` | Evaluate the drafted reply. Sends the draft, ticket, hypothesis confidence, guardrail results, and evidence signals. Uses `X-Correlation-ID: <runId>` and idempotency key `guardrails-<runId>`. 10s timeout. |
 | `GET /v1/decisions/{id}` | When the investigation page renders | `app/(dashboard)/investigations/[runId]/page.tsx` | Load the latest decision (disposition, final disposition after review, judgments, matched rule, provider model/latency) for the JevOps panel. 5s timeout. |
 | `POST /v1/decisions/{id}/outcome` | When a reviewer approves or rejects | `app/api/investigations/[runId]/approve/route.ts` | Record ground truth: `allow` on approve, `block` on reject, plus `reviewer_action`, `had_edits`, `reviewer_note`. Fire-and-forget. |
+| `POST /v1/decisions/evaluate` | A Devin **fix** task finishes with a PR | `lib/integrations/jevops/devin-review.ts` (from the Devin poller and webhook) | Merge-readiness review (`action_type: merge_devin_fix`) with custom questions. See [Jev review of Devin output](#jev-review-of-devin-output). |
+| `POST /v1/decisions/{id}/outcome` | GitHub reports the Devin PR merged or closed | `lib/webhooks/github.ts` | Ground truth for Devin reviews: `allow` if merged, `block` if closed unmerged |
 
 Downstream, JevOps calls the **TypeSafe API** (`system_one` via `typesafe-sdk`) for the Jev judgments. Support Buddy never talks to TypeSafe directly.
 
@@ -470,6 +472,18 @@ Downstream, JevOps calls the **TypeSafe API** (`system_one` via `typesafe-sdk`) 
 - **Fail-open to local guardrails.** If JevOps is disabled, unreachable, or returns an error, the run continues with the regex + LLM guardrails only. The failure is logged as `JevOps evaluation failed` / `JevOps evaluation error` (service `jevops-client`).
 - **Only `block` overrides.** A `block` disposition fails guardrails. `human_review` needs no override because every run already goes to the approval queue. `allow` and `retry` leave the local result unchanged.
 - **UI:** the investigation page shows a **"My name Jev: typesafe AI response"** panel with the disposition, matched rule, judgments with confidence, and an "Open in JevOps" link. Settings shows JevOps as live only when URL, key and the enable flag are all set.
+
+### Jev review of Devin output
+
+When a Devin **fix** task finishes with a pull request, JevOps reviews it before anyone merges:
+
+1. **Evaluate**: Support Buddy sends the PR, changed files, test results, residual risks and the investigation's top root cause, and asks four questions: *fixes root cause* (0–1), *tests credible* (0–1), *merge risk* (1–10), and *recommended route*.
+2. **Local policy**: deterministic rules can only make the result stricter. Untested changes to sensitive paths (auth, billing, payments, migrations, secrets, security, infra, CI workflows) are blocked. Any residual risk Devin reports means at least `human_review`.
+3. **UI**: a **"Jev review of Devin output"** card appears under the Devin chat with the disposition, any policy escalation, judgment bars and **Open PR**.
+4. **Send back to Devin** (`POST /api/devin/tasks/[taskId]/jev-feedback`): posts the failing judgments, plus an optional note, into the Devin session. It then resumes polling (`devin/task.resumed`) and re-reviews Devin's new output. The limit is 2 rounds; each round uses its own idempotency key `devin-<taskId>-r<round>`.
+5. **Calibration**: when GitHub reports the PR merged or closed, the outcome is sent to JevOps and shown on the card.
+
+Stored on `DevinTask` as `jevopsDecisionId`, `jevopsReview` (UI snapshot) and `jevopsReviewRound`. Reproduce tasks and fixes without a PR are not reviewed.
 
 ### Configuration
 

@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/utils";
 import { DevinChat } from "./devin-chat";
+import { DevinJevReviewCard } from "./devin-jev-review";
+import type { DevinJevReview } from "@/lib/integrations/jevops/devin-review-shared";
 
 export interface SerializedDevinTask {
   id: string;
@@ -21,6 +23,8 @@ export interface SerializedDevinTask {
   updatedAt: string;
   ticketId?: string | null;
   investigationRunId?: string | null;
+  jevopsReview?: DevinJevReview | null;
+  jevopsReviewRound?: number;
 }
 
 const STATUS_STYLES: Record<string, { color: string; animate?: boolean; label?: string }> = {
@@ -159,6 +163,16 @@ export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
           taskId={task.id}
           taskStatus={task.status}
           sessionUrl={task.sessionUrl}
+        />
+      )}
+
+      {task.jevopsReview && (
+        <DevinJevReviewCard
+          taskId={task.id}
+          review={task.jevopsReview}
+          feedbackRounds={task.jevopsReviewRound ?? 0}
+          taskStatus={task.status}
+          pullRequestUrl={task.pullRequestUrl}
         />
       )}
     </div>

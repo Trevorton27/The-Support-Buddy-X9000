@@ -546,6 +546,11 @@ model DevinTask {
   completedAt        DateTime?
   createdBy          String    // Clerk userId
 
+  // JevOps review of Devin's output (fix PRs): latest decision + UI snapshot
+  jevopsDecisionId   String?
+  jevopsReview       Json?     // DevinJevReview — see lib/integrations/jevops/devin-review-shared.ts
+  jevopsReviewRound  Int       @default(0) // times Jev feedback was sent back to Devin
+
   // Relations
   ticketId           String?
   investigationRunId String?

@@ -13,6 +13,7 @@ import type { DevinSession } from "@/lib/integrations/devin/types";
 import { parseDevinResult } from "@/lib/integrations/devin/result-parser";
 import { transitionRun } from "@/lib/demo-lab/lifecycle";
 import { transitionWorkItem } from "@/lib/work-items";
+import { evaluateDevinOutput } from "@/lib/integrations/jevops/devin-review";
 
 const logger = createLogger("webhook-devin");
 
@@ -161,6 +162,9 @@ async function finalizeDevinTask(taskId: string, session: DevinSession): Promise
     verdict: parsed.verdict,
     mode: task.mode,
   });
+
+  // Same idempotency key as the poller, so whichever finalizes first creates the decision
+  await evaluateDevinOutput(taskId);
 }
 
 // ─── Demo Run Sync ───
