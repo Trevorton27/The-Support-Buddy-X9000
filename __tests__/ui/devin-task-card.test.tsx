@@ -23,7 +23,8 @@ function makeTask(overrides?: Partial<SerializedDevinTask>): SerializedDevinTask
 describe("DevinTaskCard", () => {
   it("renders working status with animated indicator", () => {
     const { container } = render(<DevinTaskCard task={makeTask({ status: "working" })} />);
-    expect(screen.getByText("working")).toBeDefined();
+    // Status appears on the card badge and in the (default-open) chat header
+    expect(screen.getAllByText("working").length).toBeGreaterThan(0);
     // Animated pulse indicator is present somewhere in the card
     const pulseEl = container.querySelector(".animate-pulse");
     expect(pulseEl).not.toBeNull();
@@ -44,20 +45,33 @@ describe("DevinTaskCard", () => {
 
   it("shows cancel button for non-terminal status", () => {
     render(<DevinTaskCard task={makeTask({ status: "working" })} />);
-    // Should have cancel (X icon) button - look for the button with red text
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Cancel Devin task" })).toBeDefined();
   });
 
   it("hides cancel button for terminal status", () => {
     render(<DevinTaskCard task={makeTask({ status: "finished" })} />);
-    // No cancel or send buttons for terminal statuses
-    const buttons = screen.queryAllByRole("button");
-    // Only the "Show reason" button might exist, not action buttons
-    const actionButtons = buttons.filter(
-      (b) => !b.textContent?.includes("reason")
-    );
-    expect(actionButtons.length).toBe(0);
+    expect(screen.queryByRole("button", { name: "Cancel Devin task" })).toBeNull();
+  });
+
+  it("opens the chat by default", () => {
+    render(<DevinTaskCard task={makeTask({ status: "working" })} />);
+    expect(screen.getByText("Devin Conversation")).toBeDefined();
+    expect(screen.getByText("Hide chat")).toBeDefined();
+  });
+
+  it("shows Devin is working while the session is active", () => {
+    render(<DevinTaskCard task={makeTask({ status: "working" })} />);
+    expect(screen.getByText("Devin is working")).toBeDefined();
+  });
+
+  it("shows waiting for reply when Devin is blocked", () => {
+    render(<DevinTaskCard task={makeTask({ status: "blocked" })} />);
+    expect(screen.getByText("Devin is waiting for your reply")).toBeDefined();
+  });
+
+  it("shows no working indicator for finished sessions", () => {
+    render(<DevinTaskCard task={makeTask({ status: "finished" })} />);
+    expect(screen.queryByText("Devin is working")).toBeNull();
   });
 
   it("shows mode badge", () => {

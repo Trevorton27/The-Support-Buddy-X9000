@@ -19,7 +19,8 @@ interface DevinChatProps {
 }
 
 const TERMINAL = ["finished", "failed", "expired", "cancelled"];
-const POLL_INTERVAL = 8000;
+const WAITING = ["blocked", "waiting"];
+const POLL_INTERVAL = 4000;
 
 export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
   const [messages, setMessages] = useState<DevinMessage[]>([]);
@@ -32,6 +33,7 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isTerminal = TERMINAL.includes(liveStatus);
+  const isWaiting = WAITING.includes(liveStatus);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -80,7 +82,7 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages.length]);
+  }, [messages.length, loading, isTerminal, isWaiting]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -110,15 +112,6 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
       setSending(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
-        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-        Loading conversation...
-      </div>
-    );
-  }
 
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
@@ -161,17 +154,24 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
         ref={scrollRef}
         className="max-h-[400px] overflow-y-auto p-3 space-y-3"
       >
-        {messages.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-4">
-            No messages yet. Devin is working...
+        {messages.length === 0 && isTerminal && (
+          <p className="text-xs text-slate-400 text-center py-4 flex items-center justify-center gap-2">
+            {loading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Loading conversation...
+              </>
+            ) : (
+              "No messages in this session."
+            )}
           </p>
-        ) : (
-          messages.map((msg, i) => {
+        )}
+        {messages.map((msg, i) => {
             const isUser = msg.type.includes("user");
             return (
               <div
                 key={i}
-                className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+                className={`flex gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ${isUser ? "justify-end" : "justify-start"}`}
               >
                 {!isUser && (
                   <Bot className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
@@ -204,7 +204,27 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
                 )}
               </div>
             );
-          })
+          })}
+
+        {/* Live status while the session is active */}
+        {!isTerminal && (
+          <div className="flex gap-2 justify-start animate-in fade-in duration-300" aria-live="polite">
+            <Bot className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+            {isWaiting ? (
+              <div className="rounded-lg px-3 py-2 text-xs bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                Devin is waiting for your reply
+              </div>
+            ) : (
+              <div className="rounded-lg px-3 py-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                <span>{liveStatus === "queued" || liveStatus === "creating" ? "Devin is starting up" : "Devin is working"}</span>
+                <span className="flex gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1 h-1 rounded-full bg-current animate-bounce" />
+                </span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -224,7 +244,9 @@ export function DevinChat({ taskId, taskStatus, sessionUrl }: DevinChatProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder="Message Devin..."
+            placeholder={
+              isTerminal ? "Message Devin..." : isWaiting ? "Reply to Devin..." : "Devin is working... send a message to steer"
+            }
             className="flex-1 text-xs border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2 bg-white dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
             disabled={sending}
           />

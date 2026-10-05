@@ -51,7 +51,7 @@ const TERMINAL = ["finished", "failed", "expired", "cancelled"];
 
 export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
   const [cancelling, setCancelling] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(true);
   const [verdictExpanded, setVerdictExpanded] = useState(false);
 
   const statusStyle = STATUS_STYLES[task.status] ?? STATUS_STYLES.queued;
@@ -147,6 +147,7 @@ export function DevinTaskCard({ task }: { task: SerializedDevinTask }) {
             className="h-5 px-1.5 text-[10px] text-red-600 hover:text-red-700"
             onClick={handleCancel}
             disabled={cancelling}
+            aria-label="Cancel Devin task"
           >
             {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
           </Button>
