@@ -17,6 +17,8 @@ import type { SerializedDevinTask } from "@/components/devin/devin-task-card";
 import { InvestigationActions } from "@/components/agents/investigation-actions";
 import type { TokenUsage } from "@/lib/agent-utils";
 import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
+import { JevOpsPanel } from "@/components/agents/jevops-panel";
+import { getDecision, isJevOpsEnabled } from "@/lib/integrations/jevops/client";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -64,6 +66,10 @@ export default async function InvestigationRunPage({
 
   const hypotheses = (run.hypotheses as unknown as Hypothesis[]) ?? [];
   const guardrailsResult = run.guardrailsResult as unknown as GuardrailsResult | null;
+
+  const jevopsEnabled = isJevOpsEnabled();
+  const jevopsDecisionId = guardrailsResult?.jevopsDecisionId;
+  const jevopsDecision = jevopsDecisionId ? await getDecision(jevopsDecisionId) : null;
 
   // Aggregate token usage across all steps
   const MODEL_FOR_AGENT: Record<string, string> = {
@@ -177,6 +183,16 @@ export default async function InvestigationRunPage({
                 <GuardrailsBadge result={guardrailsResult} />
               </CardContent>
             </Card>
+          )}
+
+          {/* JevOps decision for the customer reply */}
+          {guardrailsResult && (
+            <JevOpsPanel
+              enabled={jevopsEnabled}
+              decisionId={jevopsDecisionId}
+              decision={jevopsDecision}
+              dashboardUrl={process.env.JEVOPS_DASHBOARD_URL}
+            />
           )}
 
           {/* Customer Draft Reply */}

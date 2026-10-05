@@ -35,6 +35,7 @@ const envSchema = z.object({
   JEVOPS_API_KEY: z.string().optional(),
   JEVOPS_AGENT_ID: z.string().uuid().optional(),
   JEVOPS_ENABLED: z.enum(["true", "false"]).optional().default("false"),
+  JEVOPS_DASHBOARD_URL: z.string().url().optional(),
 });
 
 function parseEnv() {

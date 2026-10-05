@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { IntegrationCard } from "@/components/settings/integration-card";
 import { DemoReset } from "@/components/settings/demo-reset";
 import { AlertTriangle } from "lucide-react";
+import { isJevOpsEnabled } from "@/lib/integrations/jevops/client";
 
 const integrations = [
   {
@@ -81,6 +82,8 @@ export default async function SettingsPage() {
   for (const integration of integrations) {
     liveStatus[integration.name] = !!process.env[integration.envKey];
   }
+  // JevOps only runs when URL, key and the enable flag are all set
+  liveStatus["JevOps"] = isJevOpsEnabled();
 
   return (
     <div className="p-8 space-y-6 max-w-2xl">

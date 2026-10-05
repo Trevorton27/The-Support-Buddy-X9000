@@ -16,7 +16,19 @@ export interface JevOpsDecision {
   }>;
   policy_trace: Record<string, unknown>;
   provider_latency_ms: number | null;
+  provider_model?: string | null;
+  mode?: string;
+  environment?: string;
   correlation_id: string | null;
+  created_at?: string | null;
+}
+
+export function isJevOpsEnabled(): boolean {
+  return (
+    !!process.env.JEVOPS_API_URL &&
+    !!process.env.JEVOPS_API_KEY &&
+    process.env.JEVOPS_ENABLED === "true"
+  );
 }
 
 export interface EvaluateParams {
@@ -34,7 +46,7 @@ export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDeci
   const apiUrl = process.env.JEVOPS_API_URL;
   const apiKey = process.env.JEVOPS_API_KEY;
 
-  if (!apiUrl || !apiKey || process.env.JEVOPS_ENABLED !== "true") {
+  if (!apiUrl || !apiKey || !isJevOpsEnabled()) {
     logger.info("JevOps not configured, skipping evaluation");
     return null;
   }
@@ -71,6 +83,33 @@ export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDeci
     return (await response.json()) as JevOpsDecision;
   } catch (error) {
     logger.error("JevOps evaluation error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+export async function getDecision(decisionId: string): Promise<JevOpsDecision | null> {
+  const apiUrl = process.env.JEVOPS_API_URL;
+  const apiKey = process.env.JEVOPS_API_KEY;
+
+  if (!apiUrl || !apiKey) return null;
+
+  try {
+    const response = await fetch(`${apiUrl}/v1/decisions/${decisionId}`, {
+      headers: { "X-API-Key": apiKey },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    if (!response.ok) {
+      logger.error("JevOps decision fetch failed", { status: response.status, decisionId });
+      return null;
+    }
+
+    return (await response.json()) as JevOpsDecision;
+  } catch (error) {
+    logger.error("JevOps decision fetch error", {
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
