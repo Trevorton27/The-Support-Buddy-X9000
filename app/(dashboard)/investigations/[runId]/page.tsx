@@ -19,6 +19,7 @@ import type { TokenUsage } from "@/lib/agent-utils";
 import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
 import { JevOpsPanel } from "@/components/agents/jevops-panel";
 import { getDecision, isJevOpsEnabled } from "@/lib/integrations/jevops/client";
+import { getEnv } from "@/lib/env";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -191,7 +192,7 @@ export default async function InvestigationRunPage({
               enabled={jevopsEnabled}
               decisionId={jevopsDecisionId}
               decision={jevopsDecision}
-              dashboardUrl={process.env.JEVOPS_DASHBOARD_URL}
+              dashboardUrl={getEnv().JEVOPS_DASHBOARD_URL}
             />
           )}
 

@@ -39,7 +39,7 @@ export function JevOpsPanel({ enabled, decisionId, decision, dashboardUrl }: Jev
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Scale className="w-4 h-4 text-slate-500" />
-          JevOps Decision
+          My name Jev: typesafe AI response
           {decision && <DispositionBadge value={decision.disposition} />}
           {decisionLink && (
             <a
