@@ -32,6 +32,7 @@ function formatJudgmentValue(value: number | string): string {
 
 export function JevOpsPanel({ enabled, decisionId, decision, dashboardUrl }: JevOpsPanelProps) {
   const matchedRule = decision?.policy_trace?.matched_rule as string | null | undefined;
+  const providerError = decision?.policy_trace?.error as string | undefined;
   const decisionLink = dashboardUrl && decisionId ? `${dashboardUrl.replace(/\/$/, "")}/decisions/${decisionId}` : null;
 
   return (
@@ -77,6 +78,13 @@ export function JevOpsPanel({ enabled, decisionId, decision, dashboardUrl }: Jev
 
         {decision && (
           <>
+            {providerError && (
+              <div className="text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2 space-y-0.5">
+                <div className="font-medium text-amber-700 dark:text-amber-300">Jev model unavailable, fell back to human review</div>
+                <div className="font-mono text-amber-600 dark:text-amber-400 break-words">{providerError}</div>
+              </div>
+            )}
+
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <dt className="text-slate-500 dark:text-slate-400">Action</dt>
               <dd className="font-mono text-slate-700 dark:text-slate-300">{decision.action_type}</dd>
