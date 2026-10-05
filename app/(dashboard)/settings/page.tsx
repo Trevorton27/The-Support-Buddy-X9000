@@ -63,6 +63,13 @@ const integrations = [
     envKey: "DEVIN_API_KEY",
     testEndpoint: "/api/integrations/devin/test",
   },
+  {
+    name: "JevOps",
+    type: "jevops",
+    description: "Decision reliability layer — typed judgments and policy rules for autonomous actions",
+    envKey: "JEVOPS_API_KEY",
+    testEndpoint: undefined as string | undefined,
+  },
 ];
 
 export default async function SettingsPage() {

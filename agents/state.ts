@@ -79,7 +79,7 @@ export interface KnowledgeChunk {
 
 // Phase 2: Guardrails types
 export interface GuardrailFlag {
-  type: "pii" | "secret" | "low_confidence" | "unsupported_claim" | "internal_leak";
+  type: "pii" | "secret" | "low_confidence" | "unsupported_claim" | "internal_leak" | "policy";
   severity: "warn" | "block";
   description: string;
   location: string;
@@ -89,6 +89,7 @@ export interface GuardrailsResult {
   passed: boolean;
   flags: GuardrailFlag[];
   revisedDraft?: string;
+  jevopsDecisionId?: string;
 }
 
 export interface InvestigationState {

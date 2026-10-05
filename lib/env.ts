@@ -30,6 +30,11 @@ const envSchema = z.object({
   // Webhook secrets for signature verification
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   DEVIN_WEBHOOK_SECRET: z.string().optional(),
+  // JevOps decision reliability layer
+  JEVOPS_API_URL: z.string().url().optional(),
+  JEVOPS_API_KEY: z.string().optional(),
+  JEVOPS_AGENT_ID: z.string().uuid().optional(),
+  JEVOPS_ENABLED: z.enum(["true", "false"]).optional().default("false"),
 });
 
 function parseEnv() {

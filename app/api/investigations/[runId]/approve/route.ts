@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { inngest } from "@/inngest/client";
+import { recordOutcome } from "@/lib/integrations/jevops/client";
 import { z } from "zod";
 
 const approveSchema = z.object({
@@ -72,6 +73,21 @@ export async function POST(
       originalDraft: run.summary || "",
     },
   });
+
+  // Record ground truth outcome in JevOps for calibration
+  const guardrailsResult = run.guardrailsResult as Record<string, unknown> | null;
+  const jevopsDecisionId = guardrailsResult?.jevopsDecisionId as string | undefined;
+  if (jevopsDecisionId) {
+    recordOutcome(
+      jevopsDecisionId,
+      action === "approved" ? "allow" : "block",
+      {
+        reviewer_action: action,
+        had_edits: (run.summary || "") !== (editedReply || run.summary || ""),
+        reviewer_note: note ?? undefined,
+      }
+    ).catch(() => {}); // fire-and-forget, don't block response
+  }
 
   return NextResponse.json({ ok: true, runId, action });
 }

@@ -7,6 +7,7 @@ import { createLogger } from "@/lib/logger";
 import { extractTokenUsage } from "@/lib/agent-utils";
 import { getGitSha } from "@/lib/git-sha";
 import { runDeterministicChecks } from "@/lib/guardrails-rules";
+import { evaluateAction, type JevOpsDecision } from "@/lib/integrations/jevops/client";
 import type { InvestigationState, GuardrailFlag, GuardrailsResult } from "../state";
 
 const logger = createLogger("guardrails-agent");
@@ -69,13 +70,66 @@ export async function guardrailsAgent(
     }
 
     const blockingFlags = flags.filter((f) => f.severity === "block");
-    const passed = blockingFlags.length === 0;
+    let passed = blockingFlags.length === 0;
     const tokenUsage = extractTokenUsage(response);
+
+    // Step 3: JevOps decision evaluation
+    let jevopsDecision: JevOpsDecision | null = null;
+    try {
+      jevopsDecision = await evaluateAction({
+        agentId: process.env.JEVOPS_AGENT_ID || "30000000-0000-0000-0000-000000000002",
+        actionType: "send_customer_reply",
+        action: {
+          draft_reply: draft,
+          ticket_id: state.ticket.id,
+          ticket_title: state.ticket.title,
+          ticket_severity: state.ticket.severity,
+        },
+        objective: "Send a customer-facing reply for a support ticket investigation",
+        state: {
+          investigation_run_id: state.runId,
+          hypotheses_count: state.hypotheses.length,
+          top_hypothesis_confidence: state.hypotheses[0]?.confidence ?? 0,
+          guardrails_passed: passed,
+          guardrails_flag_count: flags.length,
+          blocking_flag_count: blockingFlags.length,
+        },
+        evidence: {
+          has_incidents: state.incidents.length > 0,
+          has_deployments: state.deployments.length > 0,
+          knowledge_chunks_used: state.knowledgeChunks?.length ?? 0,
+          customer_plan: state.customer?.plan ?? "unknown",
+          customer_region: state.customer?.region ?? "unknown",
+        },
+        correlationId: state.runId,
+        idempotencyKey: `guardrails-${state.runId}`,
+      });
+    } catch (err) {
+      logger.warn("JevOps evaluation failed, proceeding with local guardrails only", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Merge JevOps disposition with local guardrails
+    if (jevopsDecision) {
+      if (jevopsDecision.disposition === "block") {
+        passed = false;
+        flags.push({
+          type: "policy" as GuardrailFlag["type"],
+          severity: "block",
+          description: `JevOps blocked: ${jevopsDecision.policy_trace?.matched_rule ?? "policy rule"}`,
+          location: "jevops",
+        });
+      }
+      // "human_review" doesn't override local pass — investigation routes to awaiting_approval anyway
+      // "allow" and "retry" don't override local guardrails
+    }
 
     const guardrailsResult: GuardrailsResult = {
       passed,
       flags,
       revisedDraft: semanticResult.revisedDraft,
+      ...(jevopsDecision ? { jevopsDecisionId: jevopsDecision.id } : {}),
     };
 
     logger.info("Guardrails check complete", {
