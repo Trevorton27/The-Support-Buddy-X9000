@@ -417,6 +417,74 @@ The `guardrails-agent` runs after `response_drafting`, before `escalation`.
 
 Flags are typed as `"pii" | "secret" | "internal_leak"` with severity `"warn"` or `"block"`. Results surfaced via `guardrails-badge` in the investigation trace.
 
+3. **JevOps pass** (optional) -- the draft is sent to [JevOps](#jevops-integration) for a typed decision. A `block` disposition adds a `policy` flag with location `jevops` and fails the check.
+
+---
+
+## JevOps Integration
+
+[JevOps](https://github.com/Trevorton27/jev-ops) is an AI decision reliability layer. Before a drafted customer reply reaches a human reviewer, Support Buddy asks JevOps whether sending it is appropriate. JevOps scores the action with TypeSafe AI's **Jev** model, applies its policy rules, and returns a disposition: `allow`, `retry`, `human_review`, or `block`.
+
+### Flow
+
+```
+response_drafting
+      │
+      ▼
+guardrails-agent ── 1. regex checks ── 2. gpt-4o-mini policy check
+      │
+      │  3. POST /v1/decisions/evaluate  ──────────▶  JevOps API (Railway)
+      │     action_type: send_customer_reply              │
+      │                                                    ▼
+      │                                          TypeSafe Jev model
+      │                                          (typesafe-sdk system_one)
+      │                                                    │
+      │  ◀────────── decision {id, disposition, judgments, policy_trace}
+      ▼
+guardrailsResult.jevopsDecisionId stored on InvestigationRun
+      │
+      ▼
+Investigation page ── GET /v1/decisions/{id} ──▶ "My name Jev" panel
+      │
+      ▼
+Reviewer approves / rejects
+      │
+      ▼
+POST /v1/decisions/{id}/outcome  (ground truth for calibration)
+```
+
+### APIs used
+
+All calls go to `JEVOPS_API_URL` with the `X-API-Key: $JEVOPS_API_KEY` header, from server-side code only (`lib/integrations/jevops/client.ts`).
+
+| Call | When | Called from | Purpose |
+|---|---|---|---|
+| `POST /v1/decisions/evaluate` | Every investigation, during guardrails | `agents/nodes/guardrails-agent.ts` | Evaluate the drafted reply. Sends the draft, ticket, hypothesis confidence, guardrail results, and evidence signals. Uses `X-Correlation-ID: <runId>` and idempotency key `guardrails-<runId>`. 10s timeout. |
+| `GET /v1/decisions/{id}` | When the investigation page renders | `app/(dashboard)/investigations/[runId]/page.tsx` | Load the latest decision (disposition, final disposition after review, judgments, matched rule, provider model/latency) for the JevOps panel. 5s timeout. |
+| `POST /v1/decisions/{id}/outcome` | When a reviewer approves or rejects | `app/api/investigations/[runId]/approve/route.ts` | Record ground truth: `allow` on approve, `block` on reject, plus `reviewer_action`, `had_edits`, `reviewer_note`. Fire-and-forget. |
+
+Downstream, JevOps calls the **TypeSafe API** (`system_one` via `typesafe-sdk`) for the Jev judgments. Support Buddy never talks to TypeSafe directly.
+
+### Behaviour
+
+- **Fail-open to local guardrails.** If JevOps is disabled, unreachable, or returns an error, the run continues with the regex + LLM guardrails only. The failure is logged as `JevOps evaluation failed` / `JevOps evaluation error` (service `jevops-client`).
+- **Only `block` overrides.** A `block` disposition fails guardrails. `human_review` needs no override because every run already goes to the approval queue. `allow` and `retry` leave the local result unchanged.
+- **UI:** the investigation page shows a **"My name Jev: typesafe AI response"** panel with the disposition, matched rule, judgments with confidence, and an "Open in JevOps" link. Settings shows JevOps as live only when URL, key and the enable flag are all set.
+
+### Configuration
+
+```env
+JEVOPS_ENABLED=true
+JEVOPS_API_URL=https://jevops-production.up.railway.app   # no trailing slash
+JEVOPS_API_KEY=jvo_test_<prefix>_<secret>                 # a JevOps API key, not a TypeSafe key
+JEVOPS_AGENT_ID=30000000-0000-0000-0000-000000000002      # the SupportBuddy agent in JevOps
+JEVOPS_DASHBOARD_URL=https://web-opal-two-76.vercel.app   # optional: enables "Open in JevOps"
+```
+
+- The agent ID must exist in the same JevOps org as the API key. Register it with `uv run python -m jevops.database.add_agent --key-prefix jvo_test_<prefix>` in the JevOps repo.
+- The TypeSafe key (`JEVOPS_JEV_API_KEY`) belongs on the JevOps API service, not here.
+- Restart the dev server (or redeploy) after changing these. Runs created before JevOps was enabled show "No JevOps decision recorded".
+
 ---
 
 ## GitHub Issue Sync
@@ -758,6 +826,8 @@ All integrations fall back to mock adapters when env vars are absent.
 | `DATADOG_API_KEY` | Real Datadog log enrichment |
 | `ZENDESK_API_TOKEN` + `ZENDESK_SUBDOMAIN` | Zendesk ticket import |
 | `JIRA_API_TOKEN` + `JIRA_BASE_URL` | Jira ticket creation on escalation |
+| `JEVOPS_ENABLED` + `JEVOPS_API_URL` + `JEVOPS_API_KEY` + `JEVOPS_AGENT_ID` | JevOps decision evaluation of drafted replies (see [JevOps Integration](#jevops-integration)) |
+| `JEVOPS_DASHBOARD_URL` | "Open in JevOps" link on the investigation page |
 | `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` | Required in production |
 
 ---
