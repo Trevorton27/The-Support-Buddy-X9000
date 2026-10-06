@@ -108,6 +108,7 @@ Investigation completes
   |     |-- Step 2: Poll every 2min (max 90 polls / ~3h)
   |     |   Update status, verdict, PR URL on each poll
   |     |-- Step 3: Parse result + complete WorkItem
+  |     |-- Step 4: JevOps review (fix tasks with a PR only)
   |     v
   |   Verdict: REPRODUCED / UNABLE_TO_REPRODUCE / etc.
   |
@@ -119,6 +120,13 @@ Investigation completes
         |-- Devin creates branch + opens PR
         v
       Pull Request on support-buddy-demo-product
+        |
+        v
+      Jev review of the PR (see "Jev review of Devin output")
+        |-- "Send back to Devin" -> devin/task.resumed
+        |     -> pollResumedDevinTaskFunction re-polls, re-reviews
+        v
+      PR merged / closed -> outcome sent to JevOps
 ```
 
 ![Reproduce with Devin](docs/screenshots/devin-reproduce.png)
@@ -130,6 +138,17 @@ Investigation completes
 | **Reproduce** | Investigation complete | Any authenticated user | Verdict (REPRODUCED, UNABLE_TO_REPRODUCE, etc.) |
 | **Fix** | Investigation approved | Admin only | Pull Request URL |
 | **Author Defect** | Demo Lab wizard | Admin only | New bug scenario with regression test |
+
+### Devin Chat
+
+Each Devin task card on the investigation page shows the live Devin conversation (`components/devin/devin-chat.tsx`):
+
+- **Open by default.** The chat loads with the card. "Hide chat" collapses it.
+- **Live status.** While the session is active, the last bubble reads **"Devin is starting up"** (queued or creating), **"Devin is working"** with animated dots, or **"Devin is waiting for your reply"** when Devin is blocked.
+- **Streaming messages.** Polls `GET /api/devin/tasks/[taskId]/messages` every 4s while the session is active and stops when it finishes. New messages fade in and scroll into view.
+- **Two-way.** Messages sent from the input go to Devin via `POST /api/devin/tasks/[taskId]/message`, including to finished or blocked sessions, which resume.
+
+For fix tasks, the **Jev review of Devin output** card renders directly below the chat.
 
 ### Devin Dashboard (`/devin`)
 
@@ -469,9 +488,27 @@ Downstream, JevOps calls the **TypeSafe API** (`system_one` via `typesafe-sdk`) 
 
 ### Behaviour
 
-- **Fail-open to local guardrails.** If JevOps is disabled, unreachable, or returns an error, the run continues with the regex + LLM guardrails only. The failure is logged as `JevOps evaluation failed` / `JevOps evaluation error` (service `jevops-client`).
+- **Fail-open to local guardrails.** If JevOps is disabled, unreachable, or returns an error, the run continues with the regex + LLM guardrails only. The failure is logged as `JevOps evaluation failed` / `JevOps evaluation error` (service `jevops-client`) and stored on the run as `guardrailsResult.jevopsError` (`{ code, message }`) so the UI can show it.
 - **Only `block` overrides.** A `block` disposition fails guardrails. `human_review` needs no override because every run already goes to the approval queue. `allow` and `retry` leave the local result unchanged.
-- **UI:** the investigation page shows a **"Typesafe AI response: My Name Jev"** panel (green on success; red **"Jev Failed To Run"** with an error code and message otherwise) with the disposition, matched rule, judgments with confidence, and an "Open in JevOps" link. Settings shows JevOps as live only when URL, key and the enable flag are all set.
+- **Settings** shows JevOps as live only when URL, key and the enable flag are all set.
+
+### Investigation page panel
+
+The panel (`components/agents/jevops-panel.tsx`) is titled **"Typesafe AI response:"** followed by the run status:
+
+- **My Name Jev** (green): Jev ran. Shows the disposition, matched rule, final disposition, provider model and latency, judgments with confidence, and an "Open in JevOps" link (when `JEVOPS_DASHBOARD_URL` is set).
+- **Jev Failed To Run** (red): Jev did not run. Shows an error code and message:
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `500`, `401`, `404`, … | JevOps returned an HTTP error. The message is FastAPI's `detail` or the raw body | `401`: check `JEVOPS_API_KEY`. `5xx`: check the JevOps API logs on Railway |
+| `TIMEOUT` | No response within 10s (evaluate) or 5s (loading the decision) | If the decision was saved, reload the page |
+| `NETWORK_ERROR` | JevOps could not be reached | Check `JEVOPS_API_URL` and that the API is up |
+| `JEV_PROVIDER_ERROR` | JevOps answered but the Jev model failed, so it fell back to `human_review`. The fallback decision is still shown | Check `JEVOPS_JEV_API_KEY` / `JEVOPS_JEV_PROVIDER` on the JevOps API |
+| `NOT_CONFIGURED` | JevOps env vars are not set | Set them (see Configuration) |
+| `NO_DECISION` | No decision and no recorded error: the run predates JevOps or error tracking | Re-run the investigation |
+
+When a decision was saved but could not be loaded, the panel adds **"Jev's decision was saved but couldn't be loaded. This is usually temporary. Please reload the page to try again."** This is usually a cold start on the JevOps database. Evaluation failures do not show the hint, because reloading cannot fix them.
 
 ### Jev review of Devin output
 
