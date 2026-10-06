@@ -2,12 +2,14 @@ import Link from "next/link";
 import { ExternalLink, Scale } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { JevOpsDecision } from "@/lib/integrations/jevops/client";
+import type { JevOpsDecision, JevOpsError } from "@/lib/integrations/jevops/client";
 
 interface JevOpsPanelProps {
   enabled: boolean;
   decisionId?: string;
   decision: JevOpsDecision | null;
+  /** Why there is no decision: the evaluate call failed, or the decision could not be fetched */
+  error?: JevOpsError | null;
   dashboardUrl?: string;
 }
 
@@ -30,17 +32,44 @@ function formatJudgmentValue(value: number | string): string {
   return typeof value === "number" ? value.toFixed(2) : value;
 }
 
-export function JevOpsPanel({ enabled, decisionId, decision, dashboardUrl }: JevOpsPanelProps) {
+/** Jev ran successfully only if a decision exists and the model itself didn't fail. */
+function getFailure(
+  enabled: boolean,
+  decision: JevOpsDecision | null,
+  error: JevOpsError | null | undefined
+): JevOpsError | null {
+  if (decision) {
+    const providerError = decision.policy_trace?.error as string | undefined;
+    return providerError ? { code: "JEV_PROVIDER_ERROR", message: providerError } : null;
+  }
+  if (error) return error;
+  if (!enabled) {
+    return { code: "NOT_CONFIGURED", message: "Set JEVOPS_API_URL, JEVOPS_API_KEY and JEVOPS_ENABLED=true" };
+  }
+  return {
+    code: "NO_DECISION",
+    message: "No JevOps decision was recorded for this run. It may have run before JevOps was enabled.",
+  };
+}
+
+export function JevOpsPanel({ enabled, decisionId, decision, error, dashboardUrl }: JevOpsPanelProps) {
   const matchedRule = decision?.policy_trace?.matched_rule as string | null | undefined;
-  const providerError = decision?.policy_trace?.error as string | undefined;
+  const failure = getFailure(enabled, decision, error);
   const decisionLink = dashboardUrl && decisionId ? `${dashboardUrl.replace(/\/$/, "")}/decisions/${decisionId}` : null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
           <Scale className="w-4 h-4 text-slate-500" />
-          My name Jev: typesafe AI response
+          <span>
+            Typesafe AI response:{" "}
+            {failure ? (
+              <span className="text-red-600 dark:text-red-400">Jev Failed To Run</span>
+            ) : (
+              <span className="text-green-600 dark:text-green-400">My Name Jev</span>
+            )}
+          </span>
           {decision && <DispositionBadge value={decision.disposition} />}
           {decisionLink && (
             <a
@@ -55,36 +84,34 @@ export function JevOpsPanel({ enabled, decisionId, decision, dashboardUrl }: Jev
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!enabled && !decisionId && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            JevOps is not enabled. Set <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">JEVOPS_API_URL</code>,{" "}
-            <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">JEVOPS_API_KEY</code> and{" "}
-            <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">JEVOPS_ENABLED=true</code> to evaluate replies.{" "}
-            <Link href="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">Settings →</Link>
-          </p>
-        )}
-
-        {enabled && !decisionId && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No JevOps decision recorded for this run. It either ran before JevOps was enabled or the evaluation call failed (check the guardrails logs).
-          </p>
-        )}
-
-        {decisionId && !decision && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Decision <span className="font-mono text-xs">{decisionId}</span> could not be loaded from the JevOps API.
-          </p>
+        {failure && (
+          <div
+            role="alert"
+            className="text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-md px-3 py-2 space-y-1"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-red-700 dark:text-red-300">Error code</span>
+              <code className="font-mono text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 px-1.5 rounded">{failure.code}</code>
+            </div>
+            {failure.message && (
+              <div className="font-mono text-red-600 dark:text-red-400 break-words">{failure.message}</div>
+            )}
+            {decision && (
+              <div className="text-red-600 dark:text-red-400">JevOps fell back to {decision.disposition.replace(/_/g, " ")}.</div>
+            )}
+            {decisionId && !decision && (
+              <div className="text-red-700 dark:text-red-300 font-medium">
+                Jev&apos;s decision was saved but couldn&apos;t be loaded. This is usually temporary. Please reload the page to try again.
+              </div>
+            )}
+            {failure.code === "NOT_CONFIGURED" && (
+              <Link href="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">Settings →</Link>
+            )}
+          </div>
         )}
 
         {decision && (
           <>
-            {providerError && (
-              <div className="text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2 space-y-0.5">
-                <div className="font-medium text-amber-700 dark:text-amber-300">Jev model unavailable, fell back to human review</div>
-                <div className="font-mono text-amber-600 dark:text-amber-400 break-words">{providerError}</div>
-              </div>
-            )}
-
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <dt className="text-slate-500 dark:text-slate-400">Action</dt>
               <dd className="font-mono text-slate-700 dark:text-slate-300">{decision.action_type}</dd>

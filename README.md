@@ -471,7 +471,7 @@ Downstream, JevOps calls the **TypeSafe API** (`system_one` via `typesafe-sdk`) 
 
 - **Fail-open to local guardrails.** If JevOps is disabled, unreachable, or returns an error, the run continues with the regex + LLM guardrails only. The failure is logged as `JevOps evaluation failed` / `JevOps evaluation error` (service `jevops-client`).
 - **Only `block` overrides.** A `block` disposition fails guardrails. `human_review` needs no override because every run already goes to the approval queue. `allow` and `retry` leave the local result unchanged.
-- **UI:** the investigation page shows a **"My name Jev: typesafe AI response"** panel with the disposition, matched rule, judgments with confidence, and an "Open in JevOps" link. Settings shows JevOps as live only when URL, key and the enable flag are all set.
+- **UI:** the investigation page shows a **"Typesafe AI response: My Name Jev"** panel (green on success; red **"Jev Failed To Run"** with an error code and message otherwise) with the disposition, matched rule, judgments with confidence, and an "Open in JevOps" link. Settings shows JevOps as live only when URL, key and the enable flag are all set.
 
 ### Jev review of Devin output
 

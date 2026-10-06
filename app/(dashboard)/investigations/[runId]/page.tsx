@@ -19,7 +19,7 @@ import { InvestigationActions } from "@/components/agents/investigation-actions"
 import type { TokenUsage } from "@/lib/agent-utils";
 import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
 import { JevOpsPanel } from "@/components/agents/jevops-panel";
-import { getDecision, isJevOpsEnabled } from "@/lib/integrations/jevops/client";
+import { getDecisionResult, isJevOpsEnabled } from "@/lib/integrations/jevops/client";
 import { getEnv } from "@/lib/env";
 
 async function getRun(runId: string) {
@@ -72,7 +72,9 @@ export default async function InvestigationRunPage({
 
   const jevopsEnabled = isJevOpsEnabled();
   const jevopsDecisionId = guardrailsResult?.jevopsDecisionId;
-  const jevopsDecision = jevopsDecisionId ? await getDecision(jevopsDecisionId) : null;
+  const jevopsFetch = jevopsDecisionId ? await getDecisionResult(jevopsDecisionId) : null;
+  const jevopsDecision = jevopsFetch?.ok ? jevopsFetch.data : null;
+  const jevopsError = jevopsFetch && !jevopsFetch.ok ? jevopsFetch.error : guardrailsResult?.jevopsError ?? null;
 
   // Aggregate token usage across all steps
   const MODEL_FOR_AGENT: Record<string, string> = {
@@ -195,6 +197,7 @@ export default async function InvestigationRunPage({
               enabled={jevopsEnabled}
               decisionId={jevopsDecisionId}
               decision={jevopsDecision}
+              error={jevopsError}
               dashboardUrl={getEnv().JEVOPS_DASHBOARD_URL}
             />
           )}

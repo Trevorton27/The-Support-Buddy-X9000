@@ -90,6 +90,7 @@ export interface GuardrailsResult {
   flags: GuardrailFlag[];
   revisedDraft?: string;
   jevopsDecisionId?: string;
+  jevopsError?: { code: string; message: string }; // why JevOps produced no decision
 }
 
 export interface InvestigationState {

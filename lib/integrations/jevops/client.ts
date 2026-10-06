@@ -49,13 +49,43 @@ export interface EvaluateParams {
   idempotencyKey?: string;
 }
 
-export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDecision | null> {
+/** Why a JevOps call didn't produce a decision. `code` is the HTTP status, or a name for non-HTTP failures. */
+export interface JevOpsError {
+  code: string; // e.g. "500", "401", "TIMEOUT", "NETWORK_ERROR", "NOT_CONFIGURED"
+  message: string;
+}
+
+export type JevOpsResult<T> = { ok: true; data: T } | { ok: false; error: JevOpsError };
+
+async function httpError(response: Response): Promise<JevOpsError> {
+  const body = (await response.text().catch(() => "")).trim();
+  let message = body;
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
+    if (detail !== undefined) message = typeof detail === "string" ? detail : JSON.stringify(detail);
+  } catch {
+    /* not JSON — keep the raw body */
+  }
+  return { code: String(response.status), message: (message || response.statusText).slice(0, 500) };
+}
+
+function thrownError(error: unknown): JevOpsError {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : String(error);
+  if (name === "TimeoutError" || name === "AbortError") return { code: "TIMEOUT", message };
+  return { code: "NETWORK_ERROR", message };
+}
+
+export async function evaluateActionResult(params: EvaluateParams): Promise<JevOpsResult<JevOpsDecision>> {
   const apiUrl = process.env.JEVOPS_API_URL;
   const apiKey = process.env.JEVOPS_API_KEY;
 
   if (!apiUrl || !apiKey || !isJevOpsEnabled()) {
     logger.info("JevOps not configured, skipping evaluation");
-    return null;
+    return {
+      ok: false,
+      error: { code: "NOT_CONFIGURED", message: "Set JEVOPS_API_URL, JEVOPS_API_KEY and JEVOPS_ENABLED=true" },
+    };
   }
 
   try {
@@ -81,27 +111,31 @@ export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDeci
     });
 
     if (!response.ok) {
-      logger.error("JevOps evaluation failed", {
-        status: response.status,
-        body: await response.text(),
-      });
-      return null;
+      const error = await httpError(response);
+      logger.error("JevOps evaluation failed", { status: response.status, body: error.message });
+      return { ok: false, error };
     }
 
-    return (await response.json()) as JevOpsDecision;
-  } catch (error) {
-    logger.error("JevOps evaluation error", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    return { ok: true, data: (await response.json()) as JevOpsDecision };
+  } catch (err) {
+    const error = thrownError(err);
+    logger.error("JevOps evaluation error", { code: error.code, error: error.message });
+    return { ok: false, error };
   }
 }
 
-export async function getDecision(decisionId: string): Promise<JevOpsDecision | null> {
+export async function evaluateAction(params: EvaluateParams): Promise<JevOpsDecision | null> {
+  const result = await evaluateActionResult(params);
+  return result.ok ? result.data : null;
+}
+
+export async function getDecisionResult(decisionId: string): Promise<JevOpsResult<JevOpsDecision>> {
   const apiUrl = process.env.JEVOPS_API_URL;
   const apiKey = process.env.JEVOPS_API_KEY;
 
-  if (!apiUrl || !apiKey) return null;
+  if (!apiUrl || !apiKey) {
+    return { ok: false, error: { code: "NOT_CONFIGURED", message: "Set JEVOPS_API_URL and JEVOPS_API_KEY" } };
+  }
 
   try {
     const response = await fetch(`${apiUrl}/v1/decisions/${decisionId}`, {
@@ -111,17 +145,22 @@ export async function getDecision(decisionId: string): Promise<JevOpsDecision | 
     });
 
     if (!response.ok) {
+      const error = await httpError(response);
       logger.error("JevOps decision fetch failed", { status: response.status, decisionId });
-      return null;
+      return { ok: false, error };
     }
 
-    return (await response.json()) as JevOpsDecision;
-  } catch (error) {
-    logger.error("JevOps decision fetch error", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    return { ok: true, data: (await response.json()) as JevOpsDecision };
+  } catch (err) {
+    const error = thrownError(err);
+    logger.error("JevOps decision fetch error", { code: error.code, error: error.message });
+    return { ok: false, error };
   }
+}
+
+export async function getDecision(decisionId: string): Promise<JevOpsDecision | null> {
+  const result = await getDecisionResult(decisionId);
+  return result.ok ? result.data : null;
 }
 
 export async function recordOutcome(

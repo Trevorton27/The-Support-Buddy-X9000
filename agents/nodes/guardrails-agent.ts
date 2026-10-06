@@ -7,7 +7,7 @@ import { createLogger } from "@/lib/logger";
 import { extractTokenUsage } from "@/lib/agent-utils";
 import { getGitSha } from "@/lib/git-sha";
 import { runDeterministicChecks } from "@/lib/guardrails-rules";
-import { evaluateAction, type JevOpsDecision } from "@/lib/integrations/jevops/client";
+import { evaluateActionResult, type JevOpsDecision, type JevOpsError } from "@/lib/integrations/jevops/client";
 import type { InvestigationState, GuardrailFlag, GuardrailsResult } from "../state";
 
 const logger = createLogger("guardrails-agent");
@@ -75,8 +75,9 @@ export async function guardrailsAgent(
 
     // Step 3: JevOps decision evaluation
     let jevopsDecision: JevOpsDecision | null = null;
+    let jevopsError: JevOpsError | null = null;
     try {
-      jevopsDecision = await evaluateAction({
+      const jevopsResult = await evaluateActionResult({
         agentId: process.env.JEVOPS_AGENT_ID || "30000000-0000-0000-0000-000000000002",
         actionType: "send_customer_reply",
         action: {
@@ -104,9 +105,12 @@ export async function guardrailsAgent(
         correlationId: state.runId,
         idempotencyKey: `guardrails-${state.runId}`,
       });
+      if (jevopsResult.ok) jevopsDecision = jevopsResult.data;
+      else jevopsError = jevopsResult.error;
     } catch (err) {
+      jevopsError = { code: "CLIENT_ERROR", message: err instanceof Error ? err.message : String(err) };
       logger.warn("JevOps evaluation failed, proceeding with local guardrails only", {
-        error: err instanceof Error ? err.message : String(err),
+        error: jevopsError.message,
       });
     }
 
@@ -130,6 +134,7 @@ export async function guardrailsAgent(
       flags,
       revisedDraft: semanticResult.revisedDraft,
       ...(jevopsDecision ? { jevopsDecisionId: jevopsDecision.id } : {}),
+      ...(jevopsError ? { jevopsError } : {}),
     };
 
     logger.info("Guardrails check complete", {
