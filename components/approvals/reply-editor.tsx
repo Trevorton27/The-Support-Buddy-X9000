@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Check, X, Edit2 } from "lucide-react";
+import { Check, X, Edit2, ArrowRight } from "lucide-react";
 
 interface ReplyEditorProps {
   runId: string;
   originalDraft: string;
+  /** Next pending approval, for "Approve & next". Omit when this is the last one. */
+  nextRunId?: string | null;
 }
 
-export function ReplyEditor({ runId, originalDraft }: ReplyEditorProps) {
+export function ReplyEditor({ runId, originalDraft, nextRunId }: ReplyEditorProps) {
   const router = useRouter();
   const [editedReply, setEditedReply] = useState(originalDraft);
   const [note, setNote] = useState("");
@@ -18,7 +20,7 @@ export function ReplyEditor({ runId, originalDraft }: ReplyEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const isEdited = editedReply !== originalDraft;
 
-  async function submit(action: "approved" | "rejected") {
+  async function submit(action: "approved" | "rejected", goToNext = false) {
     setSubmitting(true);
     setError(null);
     try {
@@ -37,7 +39,12 @@ export function ReplyEditor({ runId, originalDraft }: ReplyEditorProps) {
         throw new Error(data.error || "Failed to submit");
       }
 
-      router.push("/approvals");
+      // Stay with the item so the reviewer can see what happens next, or move on to the next one
+      router.push(
+        goToNext && nextRunId
+          ? `/approvals/${nextRunId}?prev=${runId}&prevAction=${action}`
+          : `/investigations/${runId}?decided=${action}`
+      );
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -89,6 +96,17 @@ export function ReplyEditor({ runId, originalDraft }: ReplyEditorProps) {
           <Check className="w-4 h-4 mr-1.5" />
           {submitting ? "Submitting..." : "Approve & Send"}
         </Button>
+        {nextRunId && (
+          <Button
+            variant="outline"
+            onClick={() => submit("approved", true)}
+            disabled={submitting}
+            className="border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/40"
+          >
+            Approve & next
+            <ArrowRight className="w-4 h-4 ml-1.5" />
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => submit("rejected")}

@@ -21,6 +21,9 @@ import { estimateCostUsd, formatCostUsd } from "@/lib/agent-utils";
 import { JevOpsPanel } from "@/components/agents/jevops-panel";
 import { getDecisionResult, isJevOpsEnabled } from "@/lib/integrations/jevops/client";
 import { getEnv } from "@/lib/env";
+import { DecisionBanner } from "@/components/approvals/decision-banner";
+import { ApprovalProgressTracker } from "@/components/approvals/approval-progress";
+import { loadApprovalProgress, getNextPendingRunId } from "@/lib/approval-progress-server";
 
 async function getRun(runId: string) {
   return prisma.investigationRun.findUnique({
@@ -53,15 +56,26 @@ const statusColor: Record<string, string> = {
 
 export default async function InvestigationRunPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runId: string }>;
+  searchParams: Promise<{ decided?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const { runId } = await params;
+  const { decided } = await searchParams;
   const run = await getRun(runId);
   if (!run) notFound();
+
+  // Post-decision UX: confirm the decision just made here, and track what happens next
+  const justDecided =
+    (decided === "approved" || decided === "rejected") && run.approvalStatus === decided ? decided : null;
+  const [approvalProgress, nextRunId] = await Promise.all([
+    loadApprovalProgress(run.id, userId),
+    justDecided ? getNextPendingRunId(run.id) : Promise.resolve(null),
+  ]);
 
   const duration = run.completedAt
     ? run.completedAt.getTime() - run.startedAt.getTime()
@@ -162,6 +176,10 @@ export default async function InvestigationRunPage({
         </div>
       </div>
 
+      {justDecided && <DecisionBanner decision={justDecided} nextRunId={nextRunId} />}
+
+      {approvalProgress && <ApprovalProgressTracker runId={run.id} initial={approvalProgress} />}
+
       {/* Phase 1: Pipeline Timing Bar */}
       {run.status === "complete" && run.steps.length > 0 && (
         <Card>
@@ -245,7 +263,7 @@ export default async function InvestigationRunPage({
 
           {/* Devin AI Actions */}
           {(run.status === "complete" || run.status === "awaiting_approval" || serializedDevinTasks.length > 0) && (
-            <Card>
+            <Card id="devin" className="scroll-mt-6">
               <CardHeader>
                 <CardTitle className="text-base">Devin AI</CardTitle>
               </CardHeader>

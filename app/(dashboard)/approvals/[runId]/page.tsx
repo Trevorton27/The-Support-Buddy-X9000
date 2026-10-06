@@ -9,16 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
 import type { Hypothesis, GuardrailsResult } from "@/agents/state";
+import { DecisionBanner } from "@/components/approvals/decision-banner";
+import { getNextPendingRunId } from "@/lib/approval-progress-server";
 
 export default async function ApprovalDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runId: string }>;
+  searchParams: Promise<{ prev?: string; prevAction?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const { runId } = await params;
+  const { prev, prevAction } = await searchParams;
 
   const run = await prisma.investigationRun.findUnique({
     where: { id: runId },
@@ -33,6 +38,17 @@ export default async function ApprovalDetailPage({
     redirect(`/investigations/${runId}`);
   }
 
+  // "Approve & next" lands here: confirm the item just decided, with a link back to it
+  const prevRun =
+    prev && (prevAction === "approved" || prevAction === "rejected")
+      ? await prisma.investigationRun.findUnique({
+          where: { id: prev },
+          select: { id: true, approvalStatus: true, ticket: { select: { title: true } } },
+        })
+      : null;
+  const prevDecision = prevRun?.approvalStatus === prevAction ? (prevAction as "approved" | "rejected") : null;
+  const nextRunId = await getNextPendingRunId(run.id);
+
   const hypotheses = (run.hypotheses as unknown as Hypothesis[]) ?? [];
   const guardrailsResult = run.guardrailsResult as unknown as GuardrailsResult | null;
 
@@ -44,6 +60,10 @@ export default async function ApprovalDetailPage({
         <span className="mx-2">/</span>
         <span className="font-mono text-xs">{run.id.slice(0, 8)}...</span>
       </div>
+
+      {prevRun && prevDecision && (
+        <DecisionBanner decision={prevDecision} subject={prevRun.ticket.title} viewHref={`/investigations/${prevRun.id}`} />
+      )}
 
       {/* Header */}
       <div>
@@ -85,7 +105,7 @@ export default async function ApprovalDetailPage({
               </p>
             </CardHeader>
             <CardContent>
-              <ReplyEditor runId={run.id} originalDraft={run.summary ?? ""} />
+              <ReplyEditor runId={run.id} originalDraft={run.summary ?? ""} nextRunId={nextRunId} />
             </CardContent>
           </Card>
         </div>

@@ -112,11 +112,27 @@ describe("ReplyEditor", () => {
       expect(body.note).toBeUndefined();
     });
 
-    it("redirects to /approvals after successful approval", async () => {
+    it("stays with the item after approval, on its investigation page", async () => {
       vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 200 }));
       render(<ReplyEditor runId={RUN_ID} originalDraft={DRAFT} />);
       await userEvent.click(screen.getByRole("button", { name: /approve & send/i }));
-      await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/approvals"));
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith(`/investigations/${RUN_ID}?decided=approved`));
+    });
+
+    it("hides Approve & next when there is no next item", () => {
+      render(<ReplyEditor runId={RUN_ID} originalDraft={DRAFT} />);
+      expect(screen.queryByRole("button", { name: /approve & next/i })).not.toBeInTheDocument();
+    });
+
+    it("Approve & next approves and opens the next pending item", async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 200 }));
+      render(<ReplyEditor runId={RUN_ID} originalDraft={DRAFT} nextRunId="run-next" />);
+      await userEvent.click(screen.getByRole("button", { name: /approve & next/i }));
+      const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+      expect(body.action).toBe("approved");
+      await waitFor(() =>
+        expect(mockPush).toHaveBeenCalledWith(`/approvals/run-next?prev=${RUN_ID}&prevAction=approved`)
+      );
     });
   });
 
